@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "probe-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Portable semantics for authored, versioned sensing instruments"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,4 +30,3 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-

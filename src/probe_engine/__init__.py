@@ -9,15 +9,23 @@ from .authoring import (
 )
 from .model import (
     Block,
+    Condition,
     DefinitionError,
+    FieldDefinition,
     InputType,
     NarrativeBlock,
     Option,
+    OptionGroup,
+    OtherControl,
     ProbeDefinition,
     QuestionBlock,
     QuestionDefinition,
     RevisionLineage,
     SectionBlock,
+    SectionDefinition,
+    StepDefinition,
+    Taxonomy,
+    TerminalRoute,
 )
 from .persistence import InMemoryTrajectoryStore, TrajectoryStore
 from .projections import (
@@ -44,19 +52,23 @@ from .runtime import (
 )
 from .schema import SchemaError, probe_from_dict, trajectory_from_dict
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Block",
+    "Condition",
     "DefinitionError",
     "DirectiveMarkdownParser",
     "EventKind",
+    "FieldDefinition",
     "InMemoryTrajectoryStore",
     "InputType",
     "MarkdownParser",
     "NarrativeBlock",
     "OperationalSummary",
     "Option",
+    "OptionGroup",
+    "OtherControl",
     "Participant",
     "Participation",
     "ProbeDefinition",
@@ -72,6 +84,10 @@ __all__ = [
     "RuntimeError",
     "SchemaError",
     "SectionBlock",
+    "SectionDefinition",
+    "StepDefinition",
+    "Taxonomy",
+    "TerminalRoute",
     "Trajectory",
     "TrajectoryEvent",
     "TrajectoryStore",

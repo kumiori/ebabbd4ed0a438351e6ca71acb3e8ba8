@@ -21,6 +21,8 @@ class EventKind(StrEnum):
     SKIPPED = "skipped"
     FLAGGED = "flagged"
     INTEGRATED = "integrated"
+    CHECKPOINT = "checkpoint"
+    SYNC_POINT_REACHED = "sync_point_reached"
 
 
 @dataclass(frozen=True)
@@ -281,7 +283,7 @@ class ProbeRuntime:
 
     def answer(self, question_id: str, value: Any, *, comment: str = "") -> None:
         question = self._question(question_id)
-        _validate_answer(question, value)
+        _validate_answer(question, value, probe=self.probe)
         self._trajectory = self._trajectory.append(
             _event(
                 EventKind.ANSWERED,
@@ -351,6 +353,26 @@ class ProbeRuntime:
     def checkpoint(self, store: Any) -> Any:
         return store.checkpoint(self._trajectory)
 
+    def reach_section_boundary(self, section_id: str, store: Any) -> Any:
+        """Record a declared process boundary; coordination remains external."""
+        try:
+            section = self.probe.section(section_id)
+        except KeyError as exc:
+            raise RuntimeError(f"Unknown section `{section_id}`.") from exc
+        if not section.checkpoint and not section.sync_point:
+            raise RuntimeError(f"Section `{section_id}` has no process boundary.")
+        self._trajectory = self._trajectory.append(
+            _event(EventKind.CHECKPOINT, metadata={"section_id": section.id})
+        )
+        if section.sync_point:
+            self._trajectory = self._trajectory.append(
+                _event(
+                    EventKind.SYNC_POINT_REACHED,
+                    metadata={"section_id": section.id, "sync_point": section.sync_point},
+                )
+            )
+        return store.checkpoint(self._trajectory)
+
     def finalise(self, store: Any, *, idempotency_key: str) -> Any:
         if not idempotency_key:
             raise RuntimeError("Finalisation requires an idempotency key.")
@@ -369,10 +391,12 @@ class ProbeRuntime:
         return result
 
 
-def _validate_answer(question: QuestionDefinition, value: Any) -> None:
+def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> None:
     if value is None or value == "" or value == []:
         raise RuntimeError(f"Question `{question.id}` requires a non-empty answer.")
     allowed = {option.value for option in question.options}
+    if question.taxonomy_id:
+        allowed = {option.value for option in probe.taxonomy(question.taxonomy_id).options}
     if question.input_type == InputType.SINGLE and value not in allowed:
         raise RuntimeError(f"Invalid option for question `{question.id}`.")
     if question.input_type == InputType.MULTIPLE:
@@ -380,6 +404,43 @@ def _validate_answer(question: QuestionDefinition, value: Any) -> None:
             raise RuntimeError(f"Question `{question.id}` requires a collection of options.")
         if not set(value) <= allowed:
             raise RuntimeError(f"Invalid option for question `{question.id}`.")
+    if question.input_type == InputType.MULTIPLE:
+        count = len(value)
+        if question.min_select is not None and count < question.min_select:
+            raise RuntimeError(f"Question `{question.id}` requires at least {question.min_select} selections.")
+        if question.max_select is not None and count > question.max_select:
+            raise RuntimeError(f"Question `{question.id}` allows at most {question.max_select} selections.")
+    if question.input_type == InputType.REPEATABLE:
+        if not isinstance(value, (list, tuple)) or any(not isinstance(item, Mapping) for item in value):
+            raise RuntimeError(f"Question `{question.id}` requires a list of group items.")
+        if question.min_items is not None and len(value) < question.min_items:
+            raise RuntimeError(f"Question `{question.id}` requires at least {question.min_items} items.")
+        known_fields = {item.id for item in question.item_fields} | {"id"}
+        seen_item_ids: set[str] = set()
+        for index, item in enumerate(value):
+            item_id = str(item.get("id") or "")
+            if not item_id or item_id in seen_item_ids:
+                raise RuntimeError(
+                    f"Question `{question.id}` item {index} requires a unique stable id."
+                )
+            seen_item_ids.add(item_id)
+            unknown = set(item) - known_fields
+            if unknown:
+                raise RuntimeError(
+                    f"Question `{question.id}` item {index} has unknown fields: "
+                    f"{', '.join(sorted(unknown))}."
+                )
+            missing = {
+                field.id for field in question.item_fields if field.required and not item.get(field.id)
+            }
+            if missing:
+                raise RuntimeError(
+                    f"Question `{question.id}` item {index} lacks required fields: "
+                    f"{', '.join(sorted(missing))}."
+                )
+            for field in question.item_fields:
+                if field.id in item and item.get(field.id) not in (None, "", []):
+                    _validate_answer(field, item[field.id], probe=probe)
     if question.input_type == InputType.NUMBER and not isinstance(value, (int, float)):
         raise RuntimeError(f"Question `{question.id}` requires a number.")
     if question.input_type == InputType.BOOLEAN and not isinstance(value, bool):

@@ -1,0 +1,350 @@
+schema: probe-authoring/v1
+
+probe:
+  id: montreal_communs_data_ai_2026
+  revision: 1
+  title: Forum Communs de données et IA
+  status: review
+  metadata:
+    language: fr
+
+taxonomies:
+  - id: commons_ai_topics
+    options:
+      - {value: commons_principles_values, label: Principes et valeurs des communs numériques}
+      - {value: data_governance_models, label: Modèles de gouvernance des données}
+      - {value: open_data_evolution, label: Évolution du paradigme d'ouverture des données}
+      - {value: open_licenses_ai, label: Licences libres dans le contexte de l'IA}
+      - {value: ai_dataset_structuring, label: Structuration des jeux de données pour l'IA}
+      - {value: api_ai, label: API et usages liés à l'IA}
+      - {value: coalitions, label: Mise en place de coalitions}
+      - {value: advocacy, label: Communication mobilisation et plaidoyer}
+    groups:
+      - id: governance
+        label: Gouvernance des données dans le contexte de l'IA
+        option_values: [commons_principles_values, data_governance_models]
+      - id: access
+        label: Conditions d'accès aux données
+        option_values: [open_data_evolution, open_licenses_ai]
+      - id: infrastructure
+        label: Infrastructures d'accès aux données
+        option_values: [ai_dataset_structuring, api_ai]
+      - id: collective_action
+        label: Stratégies d'action collective
+        option_values: [coalitions, advocacy]
+  - id: friction_types
+    options:
+      - {value: expertise, label: Expertise ou connaissances}
+      - {value: data, label: Accès aux données}
+      - {value: infrastructure, label: Infrastructure ou outils}
+      - {value: funding, label: Financement}
+      - {value: coordination, label: Coordination entre acteurs}
+      - {value: other, label: Autre}
+  - id: actor_types
+    options:
+      - {value: government, label: Gouvernement ou administration publique}
+      - {value: cultural_institution, label: Institution culturelle patrimoniale ou éducative}
+      - {value: commons_movement, label: Mouvement des communs ou du savoir libre}
+      - {value: researcher, label: Chercheur ou chercheuse}
+      - {value: technical_builder, label: Constructeur ou constructrice d'infrastructure}
+      - {value: community, label: Communauté ou collectif}
+      - {value: other, label: Autre}
+
+sections:
+  - id: participation
+    title: Participation
+    steps: [consent, participation]
+    process: {checkpoint: true}
+  - id: portrait
+    title: Portrait de la personne participante
+    steps: [portrait, project]
+    process: {checkpoint: true}
+  - id: exchange
+    title: Partage et besoins de connaissances
+    steps: [exchange_offer, exchange_need, friction, inspiration]
+    process: {checkpoint: true, sync_point: knowledge_exchange}
+  - id: future
+    title: Vision du futur
+    steps: [future_outcome, future_effects, future_conditions, future_contribution, scenario_role]
+    process: {checkpoint: true, sync_point: future_action}
+
+steps:
+  - id: consent
+    title: Informations sur votre participation
+    body: Lisez les informations de participation et de consentement avant de poursuivre.
+    cta: Continuer
+    fields:
+      - id: consent
+        revision: 1
+        prompt: Je reconnais avoir lu et compris les informations de participation.
+        type: single
+        required: true
+        options:
+          - {value: accept, label: J'accepte}
+          - {value: decline, label: Je n'accepte pas}
+        routing:
+          - when: {field: consent, equals: decline}
+            action: end
+  - id: participation
+    title: Votre participation
+    body: Disponibilité et besoins pratiques pour les deux journées.
+    cta: Continuer
+    fields:
+      - id: availability
+        revision: 1
+        prompt: Quelle est votre disponibilité ?
+        type: multi
+        options:
+          - {value: both_full_days, label: Les deux journées complètes}
+          - {value: oct28_morning, label: 28 octobre matin}
+      - id: dietary_preferences
+        revision: 1
+        prompt: Quelles sont vos préférences alimentaires ?
+        type: multi
+        options:
+          - {value: omnivore, label: Omnivore}
+          - {value: vegetarian, label: Végétarien}
+          - {value: other, label: Autre}
+        other:
+          enabled: true
+          field: dietary_preferences_detail
+          label: Allergies / autre
+          placeholder: Précisez si nécessaire.
+  - id: portrait
+    title: Qui êtes-vous ?
+    body: Situez votre activité et votre organisation.
+    cta: Continuer
+    fields:
+      - {id: participant_name, revision: 1, prompt: Prénom et nom, type: text, required: true}
+      - id: participation_capacity
+        revision: 1
+        prompt: Vous participez en tant que…
+        type: single
+        options:
+          - {value: individual, label: Individu}
+          - {value: organization_representative, label: Représentant·e d'une organisation}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: participation_capacity_detail, label: Autre}
+      - {id: organization_name, revision: 1, prompt: Nom de l'organisation, type: text}
+      - {id: work_location, revision: 1, prompt: "Dans quelle ville êtes-vous basé·e ?", type: text}
+      - id: activity_sector
+        revision: 1
+        prompt: Quel est votre secteur d'activité ?
+        type: multi
+        options:
+          - {value: cultural_action, label: Action culturelle}
+          - {value: public_administration, label: Administration publique}
+          - {value: research, label: Recherche}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: activity_sector_detail, label: Autre}
+      - id: function
+        revision: 1
+        prompt: Quelle est votre fonction principale au sein de votre organisation ?
+        type: multi
+        max_select: 3
+        options:
+          - {value: strategic_governance, label: Direction et gouvernance stratégique}
+          - {value: research_teaching, label: Recherche et enseignement}
+          - {value: data_technology, label: Données technologies et infrastructures numériques}
+          - {value: legal_policy, label: Affaires juridiques et politiques publiques}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: function_detail, label: Autre}
+      - id: organization_size
+        revision: 1
+        prompt: Quelle est la taille de votre organisation ?
+        type: single
+        visible_if: {field: participation_capacity, equals: organization_representative}
+        options:
+          - {value: lt20, label: Moins de 20 personnes}
+          - {value: 20_99, label: 20 à 99 personnes}
+          - {value: 100_plus, label: 100 personnes et plus}
+      - id: operation_territory
+        revision: 1
+        prompt: Quel est le territoire d'opération de votre organisation ?
+        type: multi
+        visible_if: {field: participation_capacity, equals: organization_representative}
+        options:
+          - {value: quebec, label: Québec}
+          - {value: canada, label: Canada}
+          - {value: france, label: France}
+          - {value: other_eu, label: Autre pays de l'Union européenne}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: operation_territory_detail, label: Autre}
+  - id: project
+    title: Un projet à documenter ?
+    body: Documentez un projet de mise à disposition de données.
+    cta: Continuer
+    fields:
+      - id: document_project
+        revision: 1
+        prompt: Souhaitez-vous documenter un projet ?
+        type: single
+        visible_if: {field: participation_capacity, equals: organization_representative}
+        options:
+          - {value: yes, label: Oui}
+          - {value: no, label: Non}
+      - id: project_name
+        revision: 1
+        prompt: Quel est le nom du projet ?
+        type: text
+        visible_if: {field: document_project, equals: yes}
+      - id: project_description
+        revision: 1
+        prompt: Décrivez le projet en une phrase en précisant son objectif.
+        type: text
+        visible_if: {field: document_project, equals: yes}
+      - id: project_url
+        revision: 1
+        prompt: Un lien pour en savoir plus ?
+        type: text
+        visible_if: {field: document_project, equals: yes}
+  - id: exchange_offer
+    title: Que pouvez-vous partager ?
+    body: Identifiez les connaissances et ressources à partager.
+    cta: Continuer
+    fields:
+      - id: knowledge_offer
+        revision: 1
+        prompt: Dans quels domaines partageriez-vous votre expertise ?
+        type: multi
+        taxonomy: commons_ai_topics
+        presentation: {group_by: taxonomy_group}
+        other: {enabled: true, field: knowledge_offer_other, label: Autre}
+      - id: knowledge_offer_example
+        revision: 1
+        prompt: Un exemple concret si vous le souhaitez
+        type: text
+  - id: exchange_need
+    title: Que recherchez-vous ?
+    body: Identifiez les connaissances ou ressources recherchées.
+    cta: Continuer
+    fields:
+      - id: knowledge_need
+        revision: 1
+        prompt: Dans quels domaines approfondir vos connaissances ?
+        type: multi
+        taxonomy: commons_ai_topics
+        presentation: {group_by: taxonomy_group}
+        other: {enabled: true, field: knowledge_need_other, label: Autre}
+      - id: knowledge_need_example
+        revision: 1
+        prompt: Un exemple concret de ce que vous aimeriez retirer de cet événement
+        type: text
+  - id: friction
+    title: Qu'est-ce qui vous freine aujourd'hui ?
+    body: Identifiez les contraintes qui rendent l'action difficile.
+    cta: Continuer
+    fields:
+      - id: friction
+        revision: 1
+        prompt: Qu'est-ce qui freine votre capacité à avancer ?
+        type: multi
+        taxonomy: friction_types
+        max_select: 4
+        other: {enabled: true, field: friction_detail, label: Autre / précisez}
+  - id: inspiration
+    title: Une source d'inspiration
+    body: Une initiative qui ouvre une voie intéressante.
+    cta: Continuer
+    fields:
+      - id: inspiration
+        revision: 1
+        prompt: Quelle initiative trouvez-vous inspirante ?
+        type: multi
+        max_select: 3
+        options:
+          - {value: tool, label: Un outil}
+          - {value: network, label: Un regroupement}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: inspiration_detail, label: Nommez ou décrivez l'initiative}
+  - id: future_outcome
+    title: Un résultat positif
+    body: Projetons-nous dans un scénario favorable.
+    cta: Continuer
+    fields:
+      - id: future_outcome
+        revision: 1
+        prompt: À quoi pourrait ressembler un résultat positif ?
+        type: multi
+        max_select: 3
+        options:
+          - {value: political_commitment, label: Une déclaration ou un engagement politique}
+          - {value: coalition, label: La formation d'une coalition}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: future_outcome_detail, label: Précisez}
+  - id: future_effects
+    title: Quels effets dans la pratique ?
+    body: Que permettrait concrètement ce résultat ?
+    cta: Continuer
+    fields:
+      - id: future_effects
+        revision: 1
+        prompt: Quels seraient les effets de ce résultat positif ?
+        type: multi
+        max_select: 3
+        options:
+          - {value: field_change, label: Changer une pratique sur le terrain}
+          - {value: enable_new_action, label: Permettre une action impossible aujourd'hui}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: future_effects_detail, label: Précisez}
+  - id: future_conditions
+    title: Quelles étapes portées par quels acteurs ?
+    body: Ajoutez les étapes une par une et associez leurs acteurs.
+    cta: Continuer
+    fields:
+      - id: future_conditions
+        revision: 1
+        prompt: Quelles étapes permettraient à ce résultat de se concrétiser ?
+        type: repeatable
+        min_items: 0
+        item:
+          fields:
+            - id: action
+              revision: 1
+              prompt: Étape ou action nécessaire
+              type: text
+              required: true
+              suggestions:
+                - {value: consultation, label: Concertation}
+                - {value: coalition_building, label: Formation ou élargissement d'une coalition}
+                - {value: prototype, label: Prototype ou expérimentation}
+            - id: actors
+              revision: 1
+              prompt: Acteur·ices susceptibles de porter cette étape
+              type: multi
+              taxonomy: actor_types
+              required: true
+              min_select: 1
+              other: {enabled: true, field: actors_other, label: Autre}
+  - id: future_contribution
+    title: Votre contribution
+    body: Qu'êtes-vous prêt·e à faire ?
+    cta: Continuer
+    fields:
+      - id: future_contribution
+        revision: 1
+        prompt: Comment contribueriez-vous à ce résultat ?
+        type: multi
+        max_select: 4
+        options:
+          - {value: share_expertise, label: Partager une expertise}
+          - {value: join_coalition, label: Rejoindre une coalition}
+          - {value: build_tool_infrastructure, label: Construire un outil ou une infrastructure}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: future_contribution_detail, label: Précisez}
+  - id: scenario_role
+    title: Quel rôle fictionnel aimeriez-vous incarner ?
+    body: Choisissez les points de vue que vous aimeriez explorer.
+    cta: Continuer
+    fields:
+      - id: scenario_role
+        revision: 1
+        prompt: Vers quel rôle fictionnel vous projetez-vous ?
+        type: multi
+        max_select: 3
+        options:
+          - {value: international_negotiator, label: Négociateur ou négociatrice}
+          - {value: builder, label: Constructeur ou constructrice d'outils}
+          - {value: researcher, label: Chercheur ou chercheuse}
+          - {value: other, label: Autre}
+        other: {enabled: true, field: scenario_role_detail, label: Autre rôle}

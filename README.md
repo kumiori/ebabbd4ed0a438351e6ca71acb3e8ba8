@@ -12,7 +12,7 @@ It has no dependency on Streamlit, Notion, IceIceBaby, Protocol Hack,
 
 ```bash
 python -m pip install \
-  "probe-engine @ git+https://github.com/kumiori/ebabbd4ed0a438351e6ca71acb3e8ba8.git@v0.1.0"
+  "probe-engine @ git+https://github.com/kumiori/ebabbd4ed0a438351e6ca71acb3e8ba8.git@v0.2.0"
 ```
 
 For local development:
@@ -31,19 +31,16 @@ YAML questionnaires and authored documents converge on the same ordered
 from probe_engine import ProbeRuntime, load_yaml_probe
 
 probe = load_yaml_probe({
+    "schema": "probe-authoring/v1",
     "probe": {"id": "prediction", "revision": 1, "title": "Prediction"},
-    "questions": [{
-        "id": "confidence",
-        "revision": 1,
-        "prompt": "How confident are you?",
-        "input_type": "single",
-        "required": True,
-        "options": ["low", "high"],
+    "steps": [{
+        "id": "prediction", "title": "Prediction", "body": "Models meet observations.",
+        "cta": "Continue",
+        "fields": [{
+            "id": "confidence", "revision": 1, "prompt": "How confident are you?",
+            "type": "single", "required": True, "options": ["low", "high"],
+        }],
     }],
-    "blocks": [
-        {"kind": "narrative", "markdown": "Models meet observations."},
-        {"kind": "question", "question_id": "confidence"},
-    ],
 })
 
 runtime = ProbeRuntime(probe, participant_id="participant-1", scope_id="workshop-1")
@@ -94,27 +91,29 @@ revisions. It never rewrites the old response:
 from probe_engine import ProbeRuntime, load_yaml_probe
 
 rev1 = load_yaml_probe({
+    "schema": "probe-authoring/v1",
     "probe": {"id": "prediction", "revision": 1, "title": "Prediction"},
-    "questions": [{
-        "id": "confidence", "revision": 1, "prompt": "Confidence?",
-        "input_type": "single", "required": True, "options": ["low", "high"],
-    }],
+    "steps": [{"id": "prediction", "title": "Prediction", "body": "", "cta": "Continue",
+        "fields": [{"id": "confidence", "revision": 1, "prompt": "Confidence?",
+        "type": "single", "required": True, "options": ["low", "high"]}]}],
 })
 first_visit = ProbeRuntime(rev1, participant_id="p1", scope_id="course-1")
 first_visit.answer("confidence", "high")
 
 rev2 = load_yaml_probe({
+    "schema": "probe-authoring/v1",
     "probe": {"id": "prediction", "revision": 2, "title": "Prediction"},
-    "questions": [{
-        "id": "confidence", "revision": 2, "supersedes_revision": 1,
-        "prompt": "Confidence after discussion?", "input_type": "single",
+    "steps": [{"id": "prediction", "title": "Prediction", "body": "", "cta": "Continue",
+      "fields": [{
+        "id": "confidence", "revision": 2,
+        "prompt": "Confidence after discussion?", "type": "single",
         "required": True, "options": ["low", "high"],
-        "change": {
-            "type": "semantic_change",
+        "lineage": {
+            "supersedes_revision": 1, "change_type": "semantic_change",
             "reason": "The question now follows discussion.",
             "reask_if_answered": True,
         },
-    }],
+    }]}],
 })
 returning = ProbeRuntime.hydrate(
     rev2, first_visit.trajectory, participant_id="p1", scope_id="course-1"
@@ -157,6 +156,9 @@ See [docs/SCHEMAS.md](docs/SCHEMAS.md) and run:
 ```bash
 python examples/minimal_probe/run.py
 ```
+
+Consumer applications should depend only on the public package surface
+documented in [docs/CONSUMER_CONTRACT.md](docs/CONSUMER_CONTRACT.md).
 
 ## Origins
 

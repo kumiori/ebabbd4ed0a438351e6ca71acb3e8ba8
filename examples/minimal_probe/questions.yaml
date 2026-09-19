@@ -1,0 +1,12 @@
+confidence:
+  title: How confident are you?
+  revision: 1
+  mode: single_choice
+  required: true
+  options: [low, medium, high]
+challenge:
+  title: What most challenges the prediction?
+  revision: 1
+  mode: multiple_choice
+  options: [data, assumptions, interpretation]
+

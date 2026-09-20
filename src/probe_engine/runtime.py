@@ -558,7 +558,7 @@ class ProbeRuntime:
             )
         return store.checkpoint(self._trajectory)
 
-    def finalise(self, store: Any, *, idempotency_key: str) -> Any:
+    def prepare_finalisation(self, *, idempotency_key: str) -> Trajectory:
         if not idempotency_key:
             raise RuntimeError("Finalisation requires an idempotency key.")
         already_integrated = any(
@@ -571,6 +571,24 @@ class ProbeRuntime:
             candidate = candidate.append(
                 _event(EventKind.INTEGRATED, metadata={"idempotency_key": idempotency_key})
             )
+        return candidate
+
+    def finalise(
+        self,
+        store: Any,
+        *,
+        idempotency_key: str,
+        prepared: Trajectory | None = None,
+    ) -> Any:
+        candidate = prepared or self.prepare_finalisation(idempotency_key=idempotency_key)
+        if candidate.participation != self._trajectory.participation:
+            raise RuntimeError("Prepared finalisation belongs to a different participation.")
+        if not any(
+            event.kind == EventKind.INTEGRATED
+            and event.metadata.get("idempotency_key") == idempotency_key
+            for event in candidate.events
+        ):
+            raise RuntimeError("Prepared finalisation lacks its idempotency event.")
         result = store.integrate(candidate, idempotency_key=idempotency_key)
         self._trajectory = candidate
         return result

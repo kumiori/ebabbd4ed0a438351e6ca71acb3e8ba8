@@ -807,6 +807,25 @@ def test_montreal_v3_presentation_and_resolution_contract_is_canonical():
     assert probe_from_dict(value.to_dict()) == value
 
 
+def test_prepared_finalisation_is_the_exact_trajectory_sent_to_storage():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    prepared = runtime.prepare_finalisation(idempotency_key="commit-1")
+
+    class CaptureStore:
+        received = None
+
+        def integrate(self, trajectory, *, idempotency_key):
+            self.received = trajectory
+            return trajectory
+
+    store = CaptureStore()
+    runtime.finalise(store, idempotency_key="commit-1", prepared=prepared)
+
+    assert store.received == prepared
+    assert runtime.trajectory == prepared
+
+
 def test_montreal_v2_representative_answers_and_recursive_resolution():
     value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
     runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal-2026")

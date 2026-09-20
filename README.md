@@ -12,7 +12,7 @@ It has no dependency on Streamlit, Notion, IceIceBaby, Protocol Hack,
 
 ```bash
 python -m pip install \
-  "probe-engine @ git+https://github.com/kumiori/ebabbd4ed0a438351e6ca71acb3e8ba8.git@v0.2.0"
+  "probe-engine @ git+https://github.com/kumiori/ebabbd4ed0a438351e6ca71acb3e8ba8.git@main"
 ```
 
 For local development:
@@ -21,6 +21,10 @@ For local development:
 python -m pip install -e ".[dev]"
 python -m pytest
 ```
+
+`0.3.0.dev1` is an untagged integration build intended for pinned-commit
+consumption by applications while the representation and resolution contracts
+are consolidated toward the eventual `0.3.0` release.
 
 ## A tiny YAML Probe
 
@@ -47,6 +51,30 @@ runtime = ProbeRuntime(probe, participant_id="participant-1", scope_id="workshop
 runtime.answer("confidence", "high")
 print(runtime.review())
 ```
+
+## Resolution semantics
+
+Every top-level answerable interaction is unresolved until the participant uses
+one of three canonical routes: Answer through the application's CTA, Skip, or
+Flag. An answer is not intrinsically mandatory. A CTA should call
+`validate_resolution()`; `required` constrains the structure of an answer when
+the Answer route is chosen, rather than disabling Skip or Flag.
+
+```python
+runtime.skip(
+    "confidence",
+    reason_codes=["dont_know"],
+    note="Not enough evidence yet.",
+)
+runtime.validate_resolution("confidence")
+```
+
+Skip and Flag are distinct append-only events. Their default controlled
+vocabularies preserve the Prediction reason codes and labels; both accept an
+optional 500-character note. A Flag may coexist with an Answer or Skip, while a
+flag-only interaction is resolved without being classified as answered or
+skipped. Nested controls inherit their parent's resolution unless their field
+definition explicitly sets `independently_answerable: true`.
 
 The canonical classes can also be constructed directly for a Python-first Probe.
 
@@ -146,10 +174,22 @@ service without changing Probe semantics.
 
 ## Schemas and projections
 
-Probe Engine serialises `probe-definition/v1` and `probe-trajectory/v1` and
+Probe Engine serialises `probe-definition/v1`, `probe-trajectory/v1`, and
+`probe-representation-result/v1` and
 fails explicitly on unknown schemas. Neutral projections include completion,
-operational counts, response fields, distributions, and timeline-ready events.
-Applications provide visualisation and interpretation.
+operational counts, response fields, distributions, grouped taxonomies,
+free-text response collections, structured records, comparisons, composites,
+and timeline-ready events. Every aggregate result carries explicit denominator
+metadata and definition/population provenance. Applications provide visualisation;
+authored commentary remains distinguishable from computed data.
+
+```python
+from probe_engine import evaluate_representation, evaluate_results
+
+result = evaluate_representation(probe, "friction_landscape", trajectories)
+assert result.denominator.resolved <= result.denominator.eligible
+portrait = evaluate_results(probe, trajectories)
+```
 
 See [docs/SCHEMAS.md](docs/SCHEMAS.md) and run:
 

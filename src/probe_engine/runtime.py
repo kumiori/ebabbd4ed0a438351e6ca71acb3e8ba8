@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from .model import InputType, ProbeDefinition, QuestionDefinition
+from .model import InputType, ProbeDefinition, QuestionDefinition, RevisionLineage
 
 
 class RuntimeError(ValueError):
@@ -20,6 +20,7 @@ class EventKind(StrEnum):
     ANSWERED = "answered"
     SKIPPED = "skipped"
     FLAGGED = "flagged"
+    DEFERRED = "deferred"
     INTEGRATED = "integrated"
     CHECKPOINT = "checkpoint"
     SYNC_POINT_REACHED = "sync_point_reached"
@@ -49,6 +50,9 @@ class TrajectoryEvent:
     question_revision: int | None = None
     value: Any = None
     reason: str = ""
+    reason_codes: tuple[str, ...] = ()
+    reason_note: str = ""
+    legacy_reason_codes: tuple[str, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -60,6 +64,9 @@ class TrajectoryEvent:
             "question_revision": self.question_revision,
             "value": self.value,
             "reason": self.reason,
+            "reason_codes": list(self.reason_codes),
+            "reason_note": self.reason_note,
+            "legacy_reason_codes": list(self.legacy_reason_codes),
             "metadata": dict(self.metadata),
         }
 
@@ -95,6 +102,11 @@ class ReconciliationState(StrEnum):
     SKIPPED_CURRENT = "skipped_current"
     SKIPPED_PREVIOUS_VALID = "skipped_previous_valid"
     RESKIP_OR_ANSWER_REQUIRED = "reskip_or_answer_required"
+    DEFERRED_CURRENT = "deferred_current"
+    DEFERRED_PREVIOUS_VALID = "deferred_previous_valid"
+    FLAGGED_CURRENT = "flagged_current"
+    FLAGGED_PREVIOUS_VALID = "flagged_previous_valid"
+    INELIGIBLE = "ineligible"
     NEWLY_ADDED = "newly_added"
 
 
@@ -130,9 +142,25 @@ class Reconciliation:
 
     @property
     def currently_complete(self) -> bool:
-        return not any(
-            item.required and item.question_id in self.pending_questions for item in self.questions
-        )
+        return not self.pending_questions
+
+
+class ResolutionState(StrEnum):
+    UNRESOLVED = "unresolved"
+    ANSWERED = "answered"
+    SKIPPED = "skipped"
+    FLAGGED = "flagged"
+    DEFERRED = "deferred"
+    INELIGIBLE = "ineligible"
+
+
+@dataclass(frozen=True)
+class Resolution:
+    field_id: str
+    state: ResolutionState
+    flagged: bool = False
+    inherited_from: str = ""
+    event: TrajectoryEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -161,24 +189,42 @@ def _latest_disposition(
         event
         for event in events
         if event.question_id == question_id
-        and event.kind in {EventKind.ANSWERED, EventKind.SKIPPED}
+        and event.kind in {EventKind.ANSWERED, EventKind.SKIPPED, EventKind.DEFERRED}
     ]
     return relevant[-1] if relevant else None
+
+
+def _is_eligible(probe: ProbeDefinition, trajectory: Trajectory, field_id: str) -> bool:
+    field = probe.field(field_id)
+    condition = getattr(field, "visible_if", None)
+    if condition is None:
+        return True
+    source = _latest_disposition(trajectory.events, condition.field_id)
+    if source is None or source.kind != EventKind.ANSWERED:
+        return False
+    value = source.value
+    if isinstance(value, Mapping) and "selected" in value:
+        value = value.get("selected")
+    if isinstance(value, (list, tuple, set)):
+        return condition.value in value
+    return value == condition.value
 
 
 def reconcile(probe: ProbeDefinition, trajectory: Trajectory) -> Reconciliation:
     if trajectory.participation.probe_id != probe.id:
         raise RuntimeError("Trajectory belongs to a different Probe.")
     results: list[QuestionReconciliation] = []
-    for question_id in probe.question_order:
-        question = probe.question(question_id)
+    for question_id in probe.answerable_order:
+        question = probe.field(question_id)
         prior = _latest_disposition(trajectory.events, question_id)
-        previous_revision = prior.question_revision if prior else None
+        latest_flag = next((event for event in reversed(trajectory.events) if event.question_id == question_id and event.kind == EventKind.FLAGGED), None)
+        previous_revision = prior.question_revision if prior else latest_flag.question_revision if latest_flag else None
+        lineage = getattr(question, "lineage", RevisionLineage())
         if (
             prior
             and previous_revision != question.revision
-            and question.lineage.supersedes_revision is not None
-            and question.lineage.supersedes_revision != previous_revision
+            and lineage.supersedes_revision is not None
+            and lineage.supersedes_revision != previous_revision
         ):
             raise RuntimeError(
                 f"Question `{question_id}` revision {question.revision} does not "
@@ -187,9 +233,17 @@ def reconcile(probe: ProbeDefinition, trajectory: Trajectory) -> Reconciliation:
         reask = bool(
             prior
             and previous_revision != question.revision
-            and question.lineage.reask_if_answered
+            and lineage.reask_if_answered
         )
-        if prior is None:
+        if not _is_eligible(probe, trajectory, question_id):
+            state = ReconciliationState.INELIGIBLE
+        elif prior is None and latest_flag is not None:
+            state = (
+                ReconciliationState.FLAGGED_CURRENT
+                if latest_flag.question_revision == question.revision
+                else ReconciliationState.FLAGGED_PREVIOUS_VALID
+            )
+        elif prior is None:
             state = (
                 ReconciliationState.NEWLY_ADDED
                 if trajectory.participation.probe_revision < probe.revision
@@ -199,21 +253,27 @@ def reconcile(probe: ProbeDefinition, trajectory: Trajectory) -> Reconciliation:
             state = ReconciliationState.ANSWERED_CURRENT
         elif prior.kind == EventKind.SKIPPED and previous_revision == question.revision:
             state = ReconciliationState.SKIPPED_CURRENT
+        elif prior.kind == EventKind.DEFERRED and previous_revision == question.revision:
+            state = ReconciliationState.DEFERRED_CURRENT
         elif prior.kind == EventKind.ANSWERED and reask:
             state = ReconciliationState.REANSWER_REQUIRED
         elif prior.kind == EventKind.SKIPPED and reask:
             state = ReconciliationState.RESKIP_OR_ANSWER_REQUIRED
+        elif prior.kind == EventKind.DEFERRED and reask:
+            state = ReconciliationState.REANSWER_REQUIRED
         elif prior.kind == EventKind.ANSWERED:
             state = ReconciliationState.ANSWERED_PREVIOUS_VALID
-        else:
+        elif prior.kind == EventKind.SKIPPED:
             state = ReconciliationState.SKIPPED_PREVIOUS_VALID
+        else:
+            state = ReconciliationState.DEFERRED_PREVIOUS_VALID
         results.append(
             QuestionReconciliation(
                 question_id=question_id,
                 state=state,
                 previous_revision=previous_revision,
                 current_revision=question.revision,
-                change_type=question.lineage.change_type,
+                change_type=lineage.change_type,
                 reanswer_required=reask,
                 required=question.required,
             )
@@ -275,10 +335,16 @@ class ProbeRuntime:
     def trajectory(self) -> Trajectory:
         return self._trajectory
 
-    def _question(self, question_id: str) -> QuestionDefinition:
-        question = self.probe.question(question_id)
-        if question.status != "active":
+    def _question(self, question_id: str) -> QuestionDefinition | Any:
+        question = self.probe.field(question_id)
+        if self.probe.resolution_parent(question_id) != question_id:
+            raise RuntimeError(
+                f"Field `{question_id}` inherits resolution from `{self.probe.resolution_parent(question_id)}`."
+            )
+        if getattr(question, "status", "active") != "active":
             raise RuntimeError(f"Question `{question_id}` is not active.")
+        if not _is_eligible(self.probe, self._trajectory, question_id):
+            raise RuntimeError(f"Question `{question_id}` is not currently eligible.")
         return question
 
     def answer(self, question_id: str, value: Any, *, comment: str = "") -> None:
@@ -294,32 +360,94 @@ class ProbeRuntime:
             )
         )
 
-    def skip(self, question_id: str, *, reason: str = "") -> None:
+    def _reason_values(self, kind: str, reason_codes: Iterable[str], note: str, legacy: str) -> tuple[tuple[str, ...], str]:
+        taxonomy = self.probe.resolution.skip_reasons if kind == "skip" else self.probe.resolution.flag_reasons
+        allowed = {item.value for item in taxonomy.options}
+        codes = tuple(dict.fromkeys(str(value).strip() for value in reason_codes if str(value).strip()))
+        unknown = set(codes) - allowed
+        if unknown:
+            raise RuntimeError(f"Unknown {kind} reason: {', '.join(sorted(unknown))}.")
+        reason_note = str(note or legacy or "").strip()
+        if len(reason_note) > 500:
+            raise RuntimeError(f"{kind.title()} reason note exceeds 500 characters.")
+        return codes, reason_note
+
+    def skip(
+        self, question_id: str, *, reason: str = "",
+        reason_codes: Iterable[str] = (), note: str = "",
+    ) -> None:
         question = self._question(question_id)
-        if not question.skippable:
+        if not getattr(question, "skippable", True):
             raise RuntimeError(f"Question `{question_id}` cannot be skipped.")
+        codes, reason_note = self._reason_values("skip", reason_codes, note, reason)
         self._trajectory = self._trajectory.append(
             _event(
                 EventKind.SKIPPED,
+                question_id=question.id,
+                question_revision=question.revision,
+                reason=reason_note,
+                reason_codes=codes,
+                reason_note=reason_note,
+            )
+        )
+
+    def flag(
+        self, question_id: str, *, reason: str = "",
+        reason_codes: Iterable[str] = (), note: str = "",
+        metadata: Mapping[str, Any] | None = None,
+    ) -> None:
+        question = self._question(question_id)
+        if not getattr(question, "flaggable", True):
+            raise RuntimeError(f"Question `{question_id}` cannot be flagged.")
+        codes, reason_note = self._reason_values("flag", reason_codes, note, reason)
+        self._trajectory = self._trajectory.append(
+            _event(
+                EventKind.FLAGGED,
+                question_id=question.id,
+                question_revision=question.revision,
+                reason=reason_note,
+                reason_codes=codes,
+                reason_note=reason_note,
+                metadata=dict(metadata or {}),
+            )
+        )
+
+    def defer(self, question_id: str, *, reason: str = "") -> None:
+        question = self._question(question_id)
+        self._trajectory = self._trajectory.append(
+            _event(
+                EventKind.DEFERRED,
                 question_id=question.id,
                 question_revision=question.revision,
                 reason=reason,
             )
         )
 
-    def flag(self, question_id: str, *, reason: str, metadata: Mapping[str, Any] | None = None) -> None:
-        question = self._question(question_id)
-        if not question.flaggable:
-            raise RuntimeError(f"Question `{question_id}` cannot be flagged.")
-        self._trajectory = self._trajectory.append(
-            _event(
-                EventKind.FLAGGED,
-                question_id=question.id,
-                question_revision=question.revision,
-                reason=reason,
-                metadata=dict(metadata or {}),
-            )
-        )
+    def resolution(self, field_id: str) -> Resolution:
+        parent = self.probe.resolution_parent(field_id)
+        if parent != field_id:
+            inherited = self.resolution(parent)
+            return Resolution(field_id, inherited.state, inherited.flagged, parent, inherited.event)
+        if not _is_eligible(self.probe, self._trajectory, field_id):
+            return Resolution(field_id, ResolutionState.INELIGIBLE)
+        disposition = _latest_disposition(self._trajectory.events, field_id)
+        flag = next((event for event in reversed(self._trajectory.events) if event.question_id == field_id and event.kind == EventKind.FLAGGED), None)
+        if disposition is not None:
+            state = {
+                EventKind.ANSWERED: ResolutionState.ANSWERED,
+                EventKind.SKIPPED: ResolutionState.SKIPPED,
+                EventKind.DEFERRED: ResolutionState.DEFERRED,
+            }[disposition.kind]
+            return Resolution(field_id, state, flag is not None, event=disposition)
+        if flag is not None:
+            return Resolution(field_id, ResolutionState.FLAGGED, True, event=flag)
+        return Resolution(field_id, ResolutionState.UNRESOLVED)
+
+    def validate_resolution(self, field_id: str) -> Resolution:
+        resolution = self.resolution(field_id)
+        if resolution.state == ResolutionState.UNRESOLVED:
+            raise RuntimeError(f"Question `{field_id}` is unresolved; Answer, Skip, or Flag before continuing.")
+        return resolution
 
     def reconciliation(self) -> Reconciliation:
         return reconcile(self.probe, self._trajectory)
@@ -394,18 +522,33 @@ class ProbeRuntime:
 def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> None:
     if value is None or value == "" or value == []:
         raise RuntimeError(f"Question `{question.id}` requires a non-empty answer.")
+    selected_value = value
+    if question.other.enabled and isinstance(value, Mapping):
+        unknown = set(value) - {"selected", "other"}
+        if unknown:
+            raise RuntimeError(f"Question `{question.id}` has unknown composed answer fields.")
+        selected_value = value.get("selected")
+        other = value.get("other")
+        if "other" in (selected_value or ()):
+            other_text = other.get("value") if isinstance(other, Mapping) else None
+            if not isinstance(other_text, str) or not other_text.strip():
+                raise RuntimeError(f"Question `{question.id}` requires other text.")
+        elif other not in (None, {}, ""):
+            raise RuntimeError(f"Question `{question.id}` has other text without selecting other.")
     allowed = {option.value for option in question.options}
     if question.taxonomy_id:
         allowed = {option.value for option in probe.taxonomy(question.taxonomy_id).options}
-    if question.input_type == InputType.SINGLE and value not in allowed:
+    if question.other.enabled:
+        allowed.add("other")
+    if question.input_type == InputType.SINGLE and selected_value not in allowed:
         raise RuntimeError(f"Invalid option for question `{question.id}`.")
     if question.input_type == InputType.MULTIPLE:
-        if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple, set)):
+        if isinstance(selected_value, (str, bytes)) or not isinstance(selected_value, (list, tuple, set)):
             raise RuntimeError(f"Question `{question.id}` requires a collection of options.")
-        if not set(value) <= allowed:
+        if not set(selected_value) <= allowed:
             raise RuntimeError(f"Invalid option for question `{question.id}`.")
     if question.input_type == InputType.MULTIPLE:
-        count = len(value)
+        count = len(selected_value)
         if question.min_select is not None and count < question.min_select:
             raise RuntimeError(f"Question `{question.id}` requires at least {question.min_select} selections.")
         if question.max_select is not None and count > question.max_select:

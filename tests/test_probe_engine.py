@@ -21,6 +21,10 @@ from probe_engine import (
     probe_from_dict,
     project_response_field,
     trajectory_from_dict,
+    evaluate_representation,
+    evaluate_results,
+    representation_result_from_dict,
+    ResolutionState,
 )
 
 CATALOGUE = {
@@ -370,3 +374,147 @@ def test_projections_are_deterministic_and_do_not_mutate_trajectories():
     }
     assert len(project_response_field(value, trajectories)) == 4
     assert trajectories == before
+
+
+def test_composed_other_answer_survives_trajectory_round_trip():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    answer = {"selected": ["other"], "other": {"value": "Sans gluten"}}
+    runtime.answer("dietary_preferences", answer)
+    restored = trajectory_from_dict(runtime.trajectory.to_dict())
+    assert restored.events[-1].value == answer
+    with pytest.raises(RuntimeError, match="requires other text"):
+        runtime.answer("dietary_preferences", {"selected": ["other"]})
+
+
+def test_representation_definitions_and_results_round_trip():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    assert [item.id for item in value.representations] == [
+        "exchange_landscape", "friction_landscape", "future_action_map", "participant_portrait"
+    ]
+    assert probe_from_dict(value.to_dict()) == value
+    first = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    first.answer("knowledge_offer", ["data_governance_models"])
+    first.answer("knowledge_need", ["ai_dataset_structuring"])
+    first.answer("friction", ["funding"])
+    first.answer("future_conditions", [{"id": "a1", "action": "Convene", "actors": ["government"]}])
+    first.flag("friction", reason="important")
+    second = ProbeRuntime(value, participant_id="p2", scope_id="montreal")
+    second.skip("friction")
+    third = ProbeRuntime(value, participant_id="p3", scope_id="montreal")
+    third.defer("friction", reason="answer later")
+
+    distribution = evaluate_representation(
+        value, "friction_landscape", [first.trajectory, second.trajectory, third.trajectory]
+    )
+    assert distribution.denominator.to_dict() == {
+        "cohort": 3, "eligible": 3, "resolved": 3, "answered": 1, "selected": 1,
+        "skipped": 1, "flagged": 1, "deferred": 1, "unanswered": 0,
+    }
+    assert distribution.data["values"] == {"funding": {"count": 1, "proportion": 1.0}}
+    assert representation_result_from_dict(distribution.to_dict()) == distribution
+
+    comparison = evaluate_representation(value, "exchange_landscape", [first.trajectory])
+    assert comparison.data["roles"]["offer"]["data_governance_models"] == 1
+    assert comparison.data["roles"]["need"]["ai_dataset_structuring"] == 1
+    records = evaluate_representation(value, "future_action_map", [first.trajectory])
+    assert records.data["records"][0]["value"][0]["actors"] == ["government"]
+
+
+def test_results_composition_keeps_authored_commentary_distinct():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    runtime.answer("friction", ["funding"])
+    projection = evaluate_results(value, [runtime.trajectory])
+    assert projection.title == "Ce que nous voyons"
+    block = next(item for item in projection.blocks if item.representation_id == "friction_landscape")
+    assert block.commentary.kind == "authored"
+    assert "frictions" in block.commentary.markdown.lower()
+    assert block.result.representation_id == "friction_landscape"
+
+
+def test_representation_validation_fails_closed():
+    source = Path(__file__).parent / "fixtures" / "montreal.yaml"
+    payload = __import__("yaml").safe_load(source.read_text())
+    payload["representations"][0]["sources"][0]["field"] = "missing"
+    with pytest.raises(DefinitionError, match="unknown field"):
+        load_yaml_probe(payload)
+
+
+def test_continue_validates_resolution_not_a_mandatory_answer():
+    value = probe()
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="scope")
+    with pytest.raises(RuntimeError, match="unresolved"):
+        runtime.validate_resolution("confidence")
+
+    runtime.skip(
+        "confidence",
+        reason_codes=["dont_know"],
+        note="Not enough evidence yet.",
+    )
+    assert runtime.validate_resolution("confidence").state == ResolutionState.SKIPPED
+    runtime.flag(
+        "challenge",
+        reason_codes=["interesting_question", "missing_option"],
+        note="Worth revisiting.",
+    )
+    assert runtime.validate_resolution("challenge").state == ResolutionState.FLAGGED
+    assert runtime.pending() == ()
+    assert runtime.reconciliation().currently_complete is True
+
+    restored = trajectory_from_dict(runtime.trajectory.to_dict())
+    assert restored.events[0].reason_codes == ("dont_know",)
+    assert restored.events[0].reason_note == "Not enough evidence yet."
+    assert restored.events[1].reason_codes == ("interesting_question", "missing_option")
+
+
+def test_resolution_reason_taxonomies_preserve_prediction_vocabulary():
+    value = probe()
+    assert [item.value for item in value.resolution.skip_reasons.options] == [
+        "not_relevant", "dont_know", "prefer_not_to_answer", "dont_understand",
+        "no_option_fits", "too_difficult_briefly", "other",
+    ]
+    assert [item.value for item in value.resolution.flag_reasons.options] == [
+        "interesting_question", "useful_for_coordination", "thought_provoking",
+        "well_framed", "incomplete", "misleading", "too_narrow", "unclear",
+        "missing_option",
+    ]
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="scope")
+    with pytest.raises(RuntimeError, match="Unknown skip reason"):
+        runtime.skip("confidence", reason_codes=["interesting_question"])
+
+
+def test_nested_fields_inherit_parent_resolution_unless_independent():
+    payload = __import__("yaml").safe_load(
+        (Path(__file__).parent / "fixtures" / "montreal.yaml").read_text()
+    )
+    actors = payload["steps"][10]["fields"][0]["item"]["fields"][1]
+    actors["independently_answerable"] = True
+    value = load_yaml_probe(payload)
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    runtime.skip("future_conditions", reason_codes=["prefer_not_to_answer"])
+    assert runtime.resolution("action").inherited_from == "future_conditions"
+    assert runtime.resolution("actors").state == ResolutionState.UNRESOLVED
+    runtime.flag("actors", reason_codes=["unclear"])
+    assert runtime.validate_resolution("actors").state == ResolutionState.FLAGGED
+
+
+def test_flag_only_resolution_is_not_counted_as_unanswered():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    runtime.flag("friction", reason_codes=["interesting_question"])
+    result = evaluate_representation(value, "friction_landscape", [runtime.trajectory])
+    assert result.denominator.resolved == 1
+    assert result.denominator.answered == 0
+    assert result.denominator.flagged == 1
+    assert result.denominator.unanswered == 0
+    row = next(item for item in project_response_field(value, [runtime.trajectory]) if item.question_id == "friction")
+    assert row.state == "flagged" and row.value is None
+
+
+def test_conditional_fields_are_not_resolution_obligations_or_denominator_eligible():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    runtime.answer("participation_capacity", "individual")
+    assert runtime.resolution("organization_size").state == ResolutionState.INELIGIBLE
+    assert "organization_size" not in runtime.pending()

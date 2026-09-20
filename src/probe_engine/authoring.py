@@ -22,6 +22,15 @@ from .model import (
     QuestionBlock,
     QuestionDefinition,
     RevisionLineage,
+    RepresentationDefinition,
+    RepresentationScope,
+    RepresentationSource,
+    RepresentationType,
+    Interpretation,
+    ResultBlockDefinition,
+    ResultsDefinition,
+    ReasonTaxonomy,
+    ResolutionDefinition,
     SectionBlock,
     SectionDefinition,
     StepDefinition,
@@ -158,6 +167,7 @@ _FIELD_KEYS = {
     "suggestions", "presentation", "other", "min_select", "max_select", "min_items",
     "visible_if", "routing", "item", "skippable", "flaggable", "allow_comment",
     "shared_dimension", "status", "lineage", "metadata",
+    "independently_answerable",
 }
 
 
@@ -206,6 +216,7 @@ def _field_common(raw: Mapping[str, Any], *, nested: bool) -> dict[str, Any]:
         "routes": tuple(routes),
         "item_fields": item_fields,
         "metadata": dict(_mapping(raw.get("metadata") or {}, f"{context}.metadata")),
+        "independently_answerable": _bool(raw.get("independently_answerable"), not nested),
     }
 
 
@@ -301,14 +312,14 @@ def load_yaml_probe(
             f"Unsupported authored Probe schema `{payload.get('schema')}`; "
             "expected `probe-authoring/v1`."
         )
-    _reject_unknown(payload, {"schema", "probe", "taxonomies", "sections", "steps"}, "document")
+    _reject_unknown(payload, {"schema", "probe", "taxonomies", "sections", "steps", "representations", "results", "resolution"}, "document")
     meta = _mapping(payload.get("probe") or {}, "probe")
     _reject_unknown(meta, {"id", "revision", "title", "status", "metadata"}, "probe")
 
     taxonomies = []
     for taxonomy_raw in payload.get("taxonomies") or ():
         item = _mapping(taxonomy_raw, "taxonomy")
-        _reject_unknown(item, {"id", "options", "groups"}, "taxonomy")
+        _reject_unknown(item, {"id", "revision", "options", "groups"}, "taxonomy")
         options = _options(item.get("options"))
         groups = tuple(
             OptionGroup(
@@ -321,7 +332,7 @@ def load_yaml_probe(
                 for value in item.get("groups") or ()
             )
         )
-        taxonomies.append(Taxonomy(str(item.get("id") or ""), options, groups))
+        taxonomies.append(Taxonomy(str(item.get("id") or ""), options, groups, int(item.get("revision") or 1)))
 
     sections = []
     for section_raw in payload.get("sections") or ():
@@ -382,6 +393,75 @@ def load_yaml_probe(
             for field in questions
             if field.id in step.field_ids and field.status == "active"
         )
+    representations = []
+    for raw_value in payload.get("representations") or ():
+        item = _mapping(raw_value, "representation")
+        _reject_unknown(item, {"id", "revision", "type", "scope", "source", "sources", "projection", "components"}, "representation")
+        raw_sources = item.get("sources")
+        if raw_sources is None and item.get("source") is not None:
+            raw_sources = [item.get("source")]
+        sources = tuple(
+            RepresentationSource(
+                field_id=str(source.get("field") or ""),
+                trajectory=str(source.get("trajectory") or ""),
+                role=str(source.get("role") or ""),
+                path=tuple(str(part) for part in source.get("path") or ()),
+            )
+            for source in (_mapping(value, "representation source") for value in raw_sources or ())
+        )
+        components = tuple(
+            str(value.get("representation") if isinstance(value, Mapping) else value)
+            for value in item.get("components") or ()
+        )
+        representations.append(RepresentationDefinition(
+            id=str(item.get("id") or ""), revision=int(item.get("revision") or 1),
+            type=RepresentationType(str(item.get("type") or "")),
+            scope=RepresentationScope(str(item.get("scope") or "")),
+            sources=sources,
+            projection=dict(_mapping(item.get("projection") or {}, "representation projection")),
+            components=components,
+        ))
+    results = None
+    if payload.get("results") is not None:
+        raw_results = _mapping(payload.get("results"), "results")
+        _reject_unknown(raw_results, {"title", "intro", "blocks"}, "results")
+        result_blocks = []
+        for raw_value in raw_results.get("blocks") or ():
+            item = _mapping(raw_value, "results block")
+            kind = str(item.get("type") or "")
+            if kind == "narrative":
+                result_blocks.append(ResultBlockDefinition(narrative=str(item.get("markdown") or "")))
+            elif kind == "representation":
+                commentary = item.get("commentary")
+                if isinstance(commentary, Mapping):
+                    interpretation = Interpretation(str(commentary.get("markdown") or ""), str(commentary.get("kind") or "authored"))
+                elif commentary:
+                    interpretation = Interpretation(str(commentary))
+                else:
+                    interpretation = None
+                result_blocks.append(ResultBlockDefinition(
+                    representation_id=str(item.get("representation") or ""), commentary=interpretation
+                ))
+            else:
+                raise DefinitionError(f"Unsupported results block type `{kind}`.")
+        results = ResultsDefinition(str(raw_results.get("title") or ""), str(raw_results.get("intro") or ""), tuple(result_blocks))
+    resolution = ResolutionDefinition()
+    if payload.get("resolution") is not None:
+        raw_resolution = _mapping(payload.get("resolution"), "resolution")
+        _reject_unknown(raw_resolution, {"skip_reasons", "flag_reasons"}, "resolution")
+        def reasons(name: str, default: ReasonTaxonomy) -> ReasonTaxonomy:
+            raw = raw_resolution.get(name)
+            if raw is None:
+                return default
+            item = _mapping(raw, f"resolution.{name}")
+            _reject_unknown(item, {"id", "revision", "options"}, f"resolution.{name}")
+            return ReasonTaxonomy(
+                str(item.get("id") or ""), int(item.get("revision") or 1), _options(item.get("options"))
+            )
+        resolution = ResolutionDefinition(
+            reasons("skip_reasons", resolution.skip_reasons),
+            reasons("flag_reasons", resolution.flag_reasons),
+        )
     return ProbeDefinition(
         id=str(meta.get("id") or ""),
         revision=int(meta.get("revision") or 1),
@@ -392,6 +472,9 @@ def load_yaml_probe(
         sections=tuple(sections),
         steps=tuple(steps),
         taxonomies=tuple(taxonomies),
+        representations=tuple(representations),
+        results=results,
+        resolution=resolution,
         metadata=dict(meta.get("metadata") or {}),
     )
 

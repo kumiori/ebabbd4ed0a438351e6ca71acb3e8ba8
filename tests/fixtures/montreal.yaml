@@ -348,3 +348,44 @@ steps:
           - {value: researcher, label: Chercheur ou chercheuse}
           - {value: other, label: Autre}
         other: {enabled: true, field: scenario_role_detail, label: Autre rôle}
+
+representations:
+  - id: exchange_landscape
+    revision: 1
+    type: comparison
+    scope: collective
+    sources:
+      - {field: knowledge_offer, role: offer}
+      - {field: knowledge_need, role: need}
+    projection: {taxonomy: commons_ai_topics}
+  - id: friction_landscape
+    revision: 1
+    type: distribution
+    scope: collective
+    source: {field: friction}
+    projection: {taxonomy: friction_types, group_by: taxonomy_group}
+  - id: future_action_map
+    revision: 1
+    type: records
+    scope: collective
+    source: {field: future_conditions}
+  - id: participant_portrait
+    revision: 1
+    type: composite
+    scope: participant
+    components:
+      - {representation: exchange_landscape}
+      - {representation: friction_landscape}
+      - {representation: future_action_map}
+
+results:
+  title: Ce que nous voyons
+  intro: Une lecture collective des échanges, frictions et conditions d'action.
+  blocks:
+    - {type: representation, representation: exchange_landscape}
+    - type: representation
+      representation: friction_landscape
+      commentary:
+        kind: authored
+        markdown: Les frictions sont présentées comme des signaux, sans jugement ni recommandation.
+    - {type: representation, representation: future_action_map}

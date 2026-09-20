@@ -41,14 +41,23 @@ from probe_engine import ProbeRuntime
 
 runtime = ProbeRuntime(probe, participant_id="participant-1", scope_id="forum-1")
 runtime.answer("knowledge_offer", ["data_governance_models"])
-runtime.skip("friction", reason="not applicable")
-runtime.flag("future_outcome", reason="needs discussion")
+runtime.skip("friction", reason_codes=["not_relevant"])
+runtime.flag(
+    "future_outcome",
+    reason_codes=["interesting_question"],
+    note="Needs discussion.",
+)
+runtime.validate_resolution("future_outcome")
 ```
 
 `answer()` is the public validation boundary. It validates choice membership,
 selection constraints, repeatable item shape, stable item identity, and nested
-fields before appending an answer event. Skip and Flag remain distinct events;
-neither is encoded as an answer value.
+fields before appending an answer event. `validate_resolution()` is the CTA
+boundary: it accepts Answer, Skip, or Flag, so a substantive answer is not
+mandatory. Skip and Flag remain distinct events with distinct controlled reason
+taxonomies; neither is encoded as an answer value. Flag is orthogonal and can
+coexist with Answer or Skip. Nested controls inherit parent resolution unless
+explicitly declared `independently_answerable`.
 
 ## Canonical serialization
 

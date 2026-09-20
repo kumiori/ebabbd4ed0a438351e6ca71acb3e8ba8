@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.3.0.dev1 - 2026-09-20
+
+Integration build for application consumption and consolidation toward 0.3.0.
+This build is intentionally untagged.
+
+- Make Answer/CTA, Skip, and Flag explicit resolution routes for every top-level
+  interaction; substantive answers are not mandatory by default.
+- Preserve Prediction's distinct revisioned Skip and Flag reason taxonomies,
+  optional notes, and structured reason codes on canonical trajectory events.
+- Let subordinate fields inherit parent resolution unless explicitly declared
+  `independently_answerable`.
+- Count flag-only interactions as resolved rather than unanswered in neutral
+  representations while retaining Flag as an orthogonal state.
+- Add canonical representation definitions for distributions, responses, records,
+  comparisons, timelines, and composites with participant/collective/cohort scope.
+- Add neutral, serialisable representation results with explicit denominators and
+  revision/population provenance.
+- Add authored results composition with ordered narratives, representations, and
+  epistemically distinct authored commentary.
+- Preserve composed multi-select + Other answers, including recursively inside
+  repeatable records, through trajectory hydration.
+- Add static reference, capability, nested-path, compatibility, and composite-cycle
+  validation.
+- Add a distinct deferred trajectory disposition and denominator category.
+- Extend the frozen Montréal fixture with four representation conformance specimens.
+
 ## 0.2.0 - 2026-09-19
 
 - Require the explicit `probe-authoring/v1` discriminator for authored YAML.

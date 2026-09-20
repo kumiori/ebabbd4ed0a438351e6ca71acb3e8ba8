@@ -21,6 +21,15 @@ from .model import (
     QuestionBlock,
     QuestionDefinition,
     RevisionLineage,
+    RepresentationDefinition,
+    RepresentationScope,
+    RepresentationSource,
+    RepresentationType,
+    Interpretation,
+    ResultBlockDefinition,
+    ResultsDefinition,
+    ReasonTaxonomy,
+    ResolutionDefinition,
     SectionBlock,
     SectionDefinition,
     StepDefinition,
@@ -35,6 +44,13 @@ from .projections import (
     operational_summary,
     project_response_field,
     timeline_events,
+    Denominator,
+    RepresentationResult,
+    ResultsBlock,
+    ResultsProjection,
+    evaluate_representation,
+    evaluate_results,
+    representation_result_from_dict,
 )
 from .runtime import (
     EventKind,
@@ -46,13 +62,15 @@ from .runtime import (
     ReconciliationState,
     ReviewItem,
     RuntimeError,
+    Resolution,
+    ResolutionState,
     Trajectory,
     TrajectoryEvent,
     reconcile,
 )
 from .schema import SchemaError, probe_from_dict, trajectory_from_dict
 
-__version__ = "0.2.0"
+__version__ = "0.3.0.dev1"
 
 __all__ = [
     "Block",
@@ -81,7 +99,22 @@ __all__ = [
     "ResponseFieldRow",
     "ReviewItem",
     "RevisionLineage",
+    "RepresentationDefinition",
+    "RepresentationScope",
+    "RepresentationSource",
+    "RepresentationType",
+    "Interpretation",
+    "ResultBlockDefinition",
+    "ResultsDefinition",
+    "ReasonTaxonomy",
+    "ResolutionDefinition",
+    "Denominator",
+    "RepresentationResult",
+    "ResultsBlock",
+    "ResultsProjection",
     "RuntimeError",
+    "Resolution",
+    "ResolutionState",
     "SchemaError",
     "SectionBlock",
     "SectionDefinition",
@@ -101,5 +134,8 @@ __all__ = [
     "project_response_field",
     "reconcile",
     "timeline_events",
+    "evaluate_representation",
+    "evaluate_results",
+    "representation_result_from_dict",
     "trajectory_from_dict",
 ]

@@ -18,6 +18,15 @@ from .model import (
     QuestionBlock,
     QuestionDefinition,
     RevisionLineage,
+    RepresentationDefinition,
+    RepresentationScope,
+    RepresentationSource,
+    RepresentationType,
+    Interpretation,
+    ResultBlockDefinition,
+    ResultsDefinition,
+    ReasonTaxonomy,
+    ResolutionDefinition,
     SectionBlock,
     SectionDefinition,
     StepDefinition,
@@ -62,7 +71,7 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
     def route(raw: Mapping[str, Any]) -> TerminalRoute:
         return TerminalRoute(condition(raw.get("when")), str(raw.get("action") or ""))  # type: ignore[arg-type]
 
-    def field_values(raw: Mapping[str, Any]) -> dict[str, Any]:
+    def field_values(raw: Mapping[str, Any], *, nested: bool = False) -> dict[str, Any]:
         return {
             "id": str(raw["id"]),
             "revision": int(raw["revision"]),
@@ -81,9 +90,10 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
             "visible_if": condition(raw.get("visible_if")),
             "routes": tuple(route(item) for item in raw.get("routes") or ()),
             "item_fields": tuple(
-                FieldDefinition(**field_values(item)) for item in raw.get("item_fields") or ()
+                FieldDefinition(**field_values(item, nested=True)) for item in raw.get("item_fields") or ()
             ),
             "metadata": dict(raw.get("metadata") or {}),
+            "independently_answerable": bool(raw.get("independently_answerable", not nested)),
         }
 
     questions = tuple(
@@ -113,6 +123,49 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
             ))
         else:
             raise DefinitionError(f"Unsupported block kind `{raw.get('kind')}`.")
+    representations = tuple(
+        RepresentationDefinition(
+            id=str(raw["id"]), revision=int(raw["revision"]),
+            type=RepresentationType(raw["type"]), scope=RepresentationScope(raw["scope"]),
+            sources=tuple(RepresentationSource(
+                field_id=str(source.get("field") or ""),
+                trajectory=str(source.get("trajectory") or ""),
+                role=str(source.get("role") or ""),
+                path=tuple(str(part) for part in source.get("path") or ()),
+            ) for source in raw.get("sources") or ()),
+            projection=dict(raw.get("projection") or {}),
+            components=tuple(str(value) for value in raw.get("components") or ()),
+        ) for raw in payload.get("representations") or ()
+    )
+    raw_results = payload.get("results")
+    results = None
+    if raw_results:
+        result_blocks = []
+        for raw in raw_results.get("blocks") or ():
+            if raw.get("type") == "narrative":
+                result_blocks.append(ResultBlockDefinition(narrative=str(raw.get("markdown") or "")))
+            else:
+                commentary = raw.get("commentary")
+                result_blocks.append(ResultBlockDefinition(
+                    representation_id=str(raw.get("representation") or ""),
+                    commentary=Interpretation(
+                        str(commentary.get("markdown") or ""), str(commentary.get("kind") or "authored")
+                    ) if commentary else None,
+                ))
+        results = ResultsDefinition(str(raw_results.get("title") or ""), str(raw_results.get("intro") or ""), tuple(result_blocks))
+    raw_resolution = dict(payload.get("resolution") or {})
+    defaults = ResolutionDefinition()
+    def reasons(name: str, default: ReasonTaxonomy) -> ReasonTaxonomy:
+        raw = raw_resolution.get(name)
+        if not raw:
+            return default
+        return ReasonTaxonomy(
+            str(raw["id"]), int(raw["revision"]), tuple(option(item) for item in raw.get("options") or ())
+        )
+    resolution = ResolutionDefinition(
+        reasons("skip_reasons", defaults.skip_reasons),
+        reasons("flag_reasons", defaults.flag_reasons),
+    )
     return ProbeDefinition(
         id=str(payload.get("id") or ""),
         revision=int(payload.get("revision") or 0),
@@ -145,9 +198,13 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
                 str(raw["id"]),
                 tuple(option(item) for item in raw.get("options") or ()),
                 tuple(group(item) for item in raw.get("groups") or ()),
+                int(raw.get("revision") or 1),
             )
             for raw in payload.get("taxonomies") or ()
         ),
+        representations=representations,
+        results=results,
+        resolution=resolution,
         metadata=dict(payload.get("metadata") or {}),
     )
 
@@ -174,6 +231,9 @@ def trajectory_from_dict(payload: Mapping[str, Any]) -> Trajectory:
                 question_revision=event.get("question_revision"),
                 value=event.get("value"),
                 reason=str(event.get("reason") or ""),
+                reason_codes=tuple(str(value) for value in event.get("reason_codes") or ()),
+                reason_note=str(event.get("reason_note") or event.get("reason") or ""),
+                legacy_reason_codes=tuple(str(value) for value in event.get("legacy_reason_codes") or ()),
                 metadata=dict(event.get("metadata") or {}),
             )
             for event in payload.get("events") or ()

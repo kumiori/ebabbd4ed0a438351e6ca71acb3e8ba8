@@ -21,6 +21,21 @@ class InputType(StrEnum):
     REPEATABLE = "repeatable"
 
 
+class RepresentationType(StrEnum):
+    DISTRIBUTION = "distribution"
+    RESPONSES = "responses"
+    RECORDS = "records"
+    COMPARISON = "comparison"
+    TIMELINE = "timeline"
+    COMPOSITE = "composite"
+
+
+class RepresentationScope(StrEnum):
+    PARTICIPANT = "participant"
+    COLLECTIVE = "collective"
+    COHORT = "cohort"
+
+
 @dataclass(frozen=True)
 class Option:
     value: str
@@ -59,9 +74,10 @@ class Taxonomy:
     id: str
     options: tuple[Option, ...]
     groups: tuple[OptionGroup, ...] = ()
+    revision: int = 1
 
     def __post_init__(self) -> None:
-        if not self.id or not self.options:
+        if not self.id or not self.options or self.revision < 1:
             raise DefinitionError("Taxonomies require a stable id and options.")
         values = [option.value for option in self.options]
         if len(values) != len(set(values)):
@@ -80,6 +96,7 @@ class Taxonomy:
             "id": self.id,
             "options": [option.to_dict() for option in self.options],
             "groups": [group.to_dict() for group in self.groups],
+            "revision": self.revision,
         }
 
 
@@ -133,6 +150,56 @@ class OtherControl:
 
 
 @dataclass(frozen=True)
+class ReasonTaxonomy:
+    id: str
+    revision: int
+    options: tuple[Option, ...]
+
+    def __post_init__(self) -> None:
+        values = [option.value for option in self.options]
+        if not self.id or self.revision < 1 or not values or len(values) != len(set(values)):
+            raise DefinitionError("Reason taxonomies require stable identity and unique options.")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "revision": self.revision, "options": [item.to_dict() for item in self.options]}
+
+
+def _default_skip_reasons() -> ReasonTaxonomy:
+    return ReasonTaxonomy("prediction_skip_reasons", 1, (
+        Option("not_relevant", "Not relevant to me"),
+        Option("dont_know", "I don't know"),
+        Option("prefer_not_to_answer", "I prefer not to answer"),
+        Option("dont_understand", "I don't understand the question"),
+        Option("no_option_fits", "None of the options fit"),
+        Option("too_difficult_briefly", "Too difficult to answer briefly"),
+        Option("other", "Other"),
+    ))
+
+
+def _default_flag_reasons() -> ReasonTaxonomy:
+    return ReasonTaxonomy("prediction_flag_reasons", 1, (
+        Option("interesting_question", "Interesting"),
+        Option("useful_for_coordination", "Useful"),
+        Option("thought_provoking", "Thought-provoking"),
+        Option("well_framed", "Well framed"),
+        Option("incomplete", "Incomplete"),
+        Option("misleading", "Misleading"),
+        Option("too_narrow", "Too narrow"),
+        Option("unclear", "Unclear"),
+        Option("missing_option", "Missing option"),
+    ))
+
+
+@dataclass(frozen=True)
+class ResolutionDefinition:
+    skip_reasons: ReasonTaxonomy = field(default_factory=_default_skip_reasons)
+    flag_reasons: ReasonTaxonomy = field(default_factory=_default_flag_reasons)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"skip_reasons": self.skip_reasons.to_dict(), "flag_reasons": self.flag_reasons.to_dict()}
+
+
+@dataclass(frozen=True)
 class FieldDefinition:
     """One renderer-neutral answer field, recursively composable for repeatables."""
 
@@ -154,6 +221,7 @@ class FieldDefinition:
     routes: tuple[TerminalRoute, ...] = ()
     item_fields: tuple[FieldDefinition, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    independently_answerable: bool = False
 
     def __post_init__(self) -> None:
         if not self.id or not self.prompt or self.revision < 1:
@@ -189,6 +257,7 @@ class FieldDefinition:
             "routes": [route.to_dict() for route in self.routes],
             "item_fields": [item.to_dict() for item in self.item_fields],
             "metadata": dict(self.metadata),
+            "independently_answerable": self.independently_answerable,
         }
 
 
@@ -234,6 +303,7 @@ class QuestionDefinition:
     status: str = "active"
     lineage: RevisionLineage = field(default_factory=RevisionLineage)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    independently_answerable: bool = True
 
     def __post_init__(self) -> None:
         if not self.id or not self.prompt:
@@ -282,6 +352,7 @@ class QuestionDefinition:
             "status": self.status,
             "lineage": self.lineage.to_dict(),
             "metadata": dict(self.metadata),
+            "independently_answerable": self.independently_answerable,
         }
 
 
@@ -364,6 +435,91 @@ class SectionDefinition:
         }
 
 
+@dataclass(frozen=True)
+class RepresentationSource:
+    field_id: str = ""
+    trajectory: str = ""
+    role: str = ""
+    path: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        if self.field_id:
+            result["field"] = self.field_id
+        if self.trajectory:
+            result["trajectory"] = self.trajectory
+        if self.role:
+            result["role"] = self.role
+        if self.path:
+            result["path"] = list(self.path)
+        return result
+
+
+@dataclass(frozen=True)
+class RepresentationDefinition:
+    id: str
+    revision: int
+    type: RepresentationType
+    scope: RepresentationScope
+    sources: tuple[RepresentationSource, ...] = ()
+    projection: Mapping[str, Any] = field(default_factory=dict)
+    components: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.id or self.revision < 1:
+            raise DefinitionError("Representations require stable id and positive revision.")
+        if self.type == RepresentationType.COMPOSITE and not self.components:
+            raise DefinitionError(f"Composite representation `{self.id}` requires components.")
+        if self.type != RepresentationType.COMPOSITE and not self.sources:
+            raise DefinitionError(f"Representation `{self.id}` requires a source.")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "revision": self.revision,
+            "type": self.type.value,
+            "scope": self.scope.value,
+            "sources": [source.to_dict() for source in self.sources],
+            "projection": dict(self.projection),
+            "components": list(self.components),
+        }
+
+
+@dataclass(frozen=True)
+class Interpretation:
+    markdown: str
+    kind: str = "authored"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"kind": self.kind, "markdown": self.markdown}
+
+
+@dataclass(frozen=True)
+class ResultBlockDefinition:
+    representation_id: str = ""
+    narrative: str = ""
+    commentary: Interpretation | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.representation_id:
+            return {
+                "type": "representation",
+                "representation": self.representation_id,
+                "commentary": self.commentary.to_dict() if self.commentary else None,
+            }
+        return {"type": "narrative", "markdown": self.narrative}
+
+
+@dataclass(frozen=True)
+class ResultsDefinition:
+    title: str
+    intro: str = ""
+    blocks: tuple[ResultBlockDefinition, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"title": self.title, "intro": self.intro, "blocks": [b.to_dict() for b in self.blocks]}
+
+
 Block = NarrativeBlock | QuestionBlock | SectionBlock
 
 
@@ -379,6 +535,9 @@ class ProbeDefinition:
     taxonomies: tuple[Taxonomy, ...] = ()
     status: str = "active"
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    representations: tuple[RepresentationDefinition, ...] = ()
+    results: ResultsDefinition | None = None
+    resolution: ResolutionDefinition = field(default_factory=ResolutionDefinition)
 
     def __post_init__(self) -> None:
         if not self.id or not self.title or self.revision < 1:
@@ -419,6 +578,9 @@ class ProbeDefinition:
                         f"Field `{question.id}` route references unknown field "
                         f"`{route.when.field_id}`."
                     )
+        nested_ids = [field.id for question in self.questions for field in self._nested_fields(question)]
+        if len(nested_ids) != len(set(nested_ids)) or set(nested_ids) & known:
+            raise DefinitionError("Nested field IDs must be globally unique and distinct from questions.")
         step_ids = [step.id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):
             raise DefinitionError("A Probe cannot contain duplicate step IDs.")
@@ -435,6 +597,75 @@ class ProbeDefinition:
                 raise DefinitionError(
                     f"Section `{section.id}` references unknown steps: {', '.join(sorted(missing_steps))}."
                 )
+        self._validate_representations()
+
+    def _validate_representations(self) -> None:
+        ids = [item.id for item in self.representations]
+        if len(ids) != len(set(ids)):
+            raise DefinitionError("A Probe cannot contain duplicate representation IDs.")
+        known_fields = {question.id: question for question in self.questions}
+        known_representations = set(ids)
+        for representation in self.representations:
+            for source in representation.sources:
+                if source.field_id and source.field_id not in known_fields:
+                    raise DefinitionError(
+                        f"Representation `{representation.id}` references unknown field `{source.field_id}`."
+                    )
+                if source.trajectory and source.trajectory != "events":
+                    raise DefinitionError(f"Unsupported trajectory source `{source.trajectory}`.")
+                if source.path and source.field_id:
+                    current = known_fields[source.field_id].item_fields
+                    for part in source.path:
+                        match = next((field for field in current if field.id == part), None)
+                        if match is None:
+                            raise DefinitionError(
+                                f"Representation `{representation.id}` has invalid nested path."
+                            )
+                        current = match.item_fields
+            taxonomy_id = str(representation.projection.get("taxonomy") or "")
+            if taxonomy_id and taxonomy_id not in {item.id for item in self.taxonomies}:
+                raise DefinitionError(
+                    f"Representation `{representation.id}` references unknown taxonomy `{taxonomy_id}`."
+                )
+            source_fields = [known_fields[source.field_id] for source in representation.sources if source.field_id]
+            if representation.type == RepresentationType.DISTRIBUTION and any(
+                source.input_type not in {InputType.SINGLE, InputType.MULTIPLE} for source in source_fields
+            ):
+                raise DefinitionError(f"Distribution `{representation.id}` requires choice fields.")
+            if representation.type == RepresentationType.RESPONSES and any(
+                source.input_type != InputType.TEXT for source in source_fields
+            ):
+                raise DefinitionError(f"Responses `{representation.id}` requires text fields.")
+            if representation.type == RepresentationType.RECORDS and any(
+                source.input_type != InputType.REPEATABLE for source in source_fields
+            ):
+                raise DefinitionError(f"Records `{representation.id}` requires repeatable fields.")
+            if representation.type == RepresentationType.COMPARISON:
+                roles = [source.role for source in representation.sources]
+                if len(roles) < 2 or any(not role for role in roles) or len(roles) != len(set(roles)):
+                    raise DefinitionError(f"Comparison `{representation.id}` requires distinct source roles.")
+                taxonomies = {source.taxonomy_id for source in source_fields}
+                if len(taxonomies) != 1:
+                    raise DefinitionError(f"Comparison `{representation.id}` requires compatible sources.")
+            for component in representation.components:
+                if component not in known_representations:
+                    raise DefinitionError(
+                        f"Representation `{representation.id}` references unknown representation `{component}`."
+                    )
+        graph = {item.id: item.components for item in self.representations}
+        def visit(node: str, stack: set[str]) -> None:
+            if node in stack:
+                raise DefinitionError("Circular composite representation reference.")
+            for child in graph.get(node, ()):
+                visit(child, {*stack, node})
+        for node in graph:
+            visit(node, set())
+        if self.results:
+            for block in self.results.blocks:
+                if block.representation_id and block.representation_id not in known_representations:
+                    raise DefinitionError(
+                        f"Results reference unknown representation `{block.representation_id}`."
+                    )
 
     @staticmethod
     def _validate_field_taxonomies(field: Any, known: set[str]) -> None:
@@ -445,6 +676,14 @@ class ProbeDefinition:
             )
         for nested in getattr(field, "item_fields", ()):
             ProbeDefinition._validate_field_taxonomies(nested, known)
+
+    @staticmethod
+    def _nested_fields(field: Any) -> tuple[FieldDefinition, ...]:
+        return tuple(
+            nested
+            for child in getattr(field, "item_fields", ())
+            for nested in (child, *ProbeDefinition._nested_fields(child))
+        )
 
     @property
     def active_questions(self) -> tuple[QuestionDefinition, ...]:
@@ -465,11 +704,61 @@ class ProbeDefinition:
                 return question
         raise KeyError(question_id)
 
+    def field(self, field_id: str) -> QuestionDefinition | FieldDefinition:
+        try:
+            return self.question(field_id)
+        except KeyError:
+            for question in self.questions:
+                for nested in self._nested_fields(question):
+                    if nested.id == field_id:
+                        return nested
+        raise KeyError(field_id)
+
+    def resolution_parent(self, field_id: str) -> str:
+        for question in self.active_questions:
+            if question.id == field_id:
+                return field_id
+            def walk(field: FieldDefinition, inherited: str) -> str | None:
+                current = field.id if field.independently_answerable else inherited
+                if field.id == field_id:
+                    return current
+                for child in field.item_fields:
+                    found = walk(child, current)
+                    if found:
+                        return found
+                return None
+            for nested in question.item_fields:
+                found = walk(nested, question.id)
+                if found:
+                    return found
+        raise KeyError(field_id)
+
+    @property
+    def answerable_order(self) -> tuple[str, ...]:
+        ordered: list[str] = []
+        def append_nested(field: FieldDefinition) -> None:
+            if field.independently_answerable:
+                ordered.append(field.id)
+            for child in field.item_fields:
+                append_nested(child)
+        for question_id in self.question_order:
+            question = self.question(question_id)
+            ordered.append(question_id)
+            for nested in question.item_fields:
+                append_nested(nested)
+        return tuple(ordered)
+
     def taxonomy(self, taxonomy_id: str) -> Taxonomy:
         for taxonomy in self.taxonomies:
             if taxonomy.id == taxonomy_id:
                 return taxonomy
         raise KeyError(taxonomy_id)
+
+    def representation(self, representation_id: str) -> RepresentationDefinition:
+        for representation in self.representations:
+            if representation.id == representation_id:
+                return representation
+        raise KeyError(representation_id)
 
     def section(self, section_id: str) -> SectionDefinition:
         for section in self.sections:
@@ -495,5 +784,8 @@ class ProbeDefinition:
             "sections": [section.to_dict() for section in self.sections],
             "steps": [step.to_dict() for step in self.steps],
             "taxonomies": [taxonomy.to_dict() for taxonomy in self.taxonomies],
+            "representations": [item.to_dict() for item in self.representations],
+            "results": self.results.to_dict() if self.results else None,
+            "resolution": self.resolution.to_dict(),
             "metadata": dict(self.metadata),
         }

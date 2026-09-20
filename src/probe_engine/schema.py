@@ -89,10 +89,16 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
             bool(raw.get("manual_text")),
             bool(raw.get("geolocation_lookup")),
             bool(raw.get("geolocation_requires_user_action", True)),
+            str(raw.get("lookup_trigger") or "explicit_action"),
+            str(raw.get("lookup_behavior") or "suggest_and_confirm_match"),
         )
 
     def route(raw: Mapping[str, Any]) -> TerminalRoute:
-        return TerminalRoute(condition(raw.get("when")), str(raw.get("action") or ""))  # type: ignore[arg-type]
+        return TerminalRoute(
+            condition(raw.get("when")),
+            str(raw.get("action") or ""),
+            dict(raw.get("metadata") or {}),
+        )  # type: ignore[arg-type]
 
     def field_values(raw: Mapping[str, Any], *, nested: bool = False) -> dict[str, Any]:
         return {
@@ -345,8 +351,9 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
             Taxonomy(
                 str(raw["id"]),
                 tuple(option(item) for item in raw.get("options") or ()),
-                tuple(group(item) for item in raw.get("groups") or ()),
-                int(raw.get("revision") or 1),
+            tuple(group(item) for item in raw.get("groups") or ()),
+            int(raw.get("revision") or 1),
+            dict(raw.get("presentation") or {}),
             )
             for raw in payload.get("taxonomies") or ()
         ),

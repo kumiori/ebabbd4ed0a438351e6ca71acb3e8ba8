@@ -714,6 +714,8 @@ def test_montreal_v2_field_and_interaction_grammar_is_explicit():
         "manual_text": True,
         "geolocation_lookup": True,
         "geolocation_requires_user_action": True,
+        "lookup_trigger": "explicit_action",
+        "lookup_behavior": "suggest_and_confirm_match",
     }
     organisation = value.question("organisation_name")
     assert organisation.visible_if.operator == "any"
@@ -749,6 +751,59 @@ def test_montreal_v2_field_and_interaction_grammar_is_explicit():
         "future_landscape",
     ]
     assert value.representations[0].title == "Notre participation"
+
+
+def test_montreal_v3_presentation_and_resolution_contract_is_canonical():
+    source = Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml"
+    payload = __import__("yaml").safe_load(source.read_text())
+    payload["taxonomies"]["functions"]["presentation"] = {
+        "groups": "expanders",
+        "default_state": "collapsed",
+        "show_selected_count": True,
+    }
+    consent = next(item for item in payload["questions"] if item["id"] == "participation_acknowledgement")
+    consent["allow_skip"] = False
+    consent["routing"]["show_contact"] = {
+        "when": {"equals": "read_understood"},
+        "toast": "Contact us",
+    }
+    location = next(item for item in payload["questions"] if item["id"] == "base_location")
+    location["capabilities"].update({
+        "geolocation_requires_user_action": False,
+        "lookup_trigger": "after_text_input",
+        "lookup_behavior": "suggest_and_confirm_match",
+    })
+    offer = next(item for item in payload["questions"] if item["id"] == "knowledge_offer")
+    offer["companion"]["required"] = False
+    inspiration = next(item for item in payload["questions"] if item["id"] == "inspiration")
+    inspiration["selection_feedback"] = {
+        "at_limit": "3 selected",
+        "over_limit": "spectacular_soft_block",
+        "message": "Choose at most three",
+    }
+    repeatable = next(item for item in payload["questions"] if item["id"] == "future_conditions")
+    repeatable["fields"][0].update({
+        "suggestion_label": "Start from a suggestion",
+        "detail_prompt": "Add details",
+        "detail_placeholder": "Who? What?",
+        "voice_note": {"enabled": False, "disabled_note": "Soon"},
+    })
+    payload["interaction"].update({
+        "validation": {"optional_companions_do_not_block": True},
+        "submission_preview": {"enabled": True, "show_exact_payload": True},
+        "authentication": {"required_for_production_write": True},
+    })
+
+    value = load_yaml_probe(payload)
+
+    assert value.question("participation_acknowledgement").skippable is False
+    assert value.taxonomy("functions").presentation["groups"] == "expanders"
+    assert value.question("base_location").capabilities.lookup_trigger == "after_text_input"
+    assert value.question("knowledge_offer").companions[0].required is False
+    action = value.question("future_conditions").item_fields[0]
+    assert action.presentation["detail_prompt"] == "Add details"
+    assert value.authoring.presentation_hints["submission_preview"]["enabled"] is True
+    assert probe_from_dict(value.to_dict()) == value
 
 
 def test_montreal_v2_representative_answers_and_recursive_resolution():

@@ -78,7 +78,7 @@ from .runtime import (
 )
 from .schema import SchemaError, probe_from_dict, trajectory_from_dict
 
-__version__ = "0.3.0.dev2"
+__version__ = "0.3.0.dev3"
 
 __all__ = [
     "Block",

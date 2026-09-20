@@ -83,6 +83,7 @@ class Taxonomy:
     options: tuple[Option, ...]
     groups: tuple[OptionGroup, ...] = ()
     revision: int = 1
+    presentation: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.id or not self.options or self.revision < 1:
@@ -103,6 +104,7 @@ class Taxonomy:
             "options": [option.to_dict() for option in self.options],
             "groups": [group.to_dict() for group in self.groups],
             "revision": self.revision,
+            "presentation": dict(self.presentation),
         }
 
 
@@ -133,13 +135,18 @@ class Condition:
 class TerminalRoute:
     when: Condition
     action: str
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.action != "end":
-            raise DefinitionError(f"Unsupported route action `{self.action}`.")
+        if not self.action:
+            raise DefinitionError("Terminal routes require an action.")
 
     def to_dict(self) -> dict[str, Any]:
-        return {"when": self.when.to_dict(), "action": self.action}
+        return {
+            "when": self.when.to_dict(),
+            "action": self.action,
+            "metadata": dict(self.metadata),
+        }
 
 
 @dataclass(frozen=True)
@@ -185,12 +192,16 @@ class LocationCapabilities:
     manual_text: bool = False
     geolocation_lookup: bool = False
     geolocation_requires_user_action: bool = True
+    lookup_trigger: str = "explicit_action"
+    lookup_behavior: str = "suggest_and_confirm_match"
 
     def to_dict(self) -> dict[str, bool]:
         return {
             "manual_text": self.manual_text,
             "geolocation_lookup": self.geolocation_lookup,
             "geolocation_requires_user_action": self.geolocation_requires_user_action,
+            "lookup_trigger": self.lookup_trigger,
+            "lookup_behavior": self.lookup_behavior,
         }
 
 

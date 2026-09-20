@@ -363,7 +363,10 @@ def _authoring_taxonomies(payload: Mapping[str, Any]) -> tuple[Taxonomy, ...]:
     built = []
     for taxonomy_id, raw_value in _mapping(payload.get("taxonomies") or {}, "taxonomies").items():
         raw = _mapping(raw_value, f"taxonomy `{taxonomy_id}`")
-        _reject_unknown(raw, {"revision", "options", "groups"}, f"taxonomy `{taxonomy_id}`")
+        _reject_unknown(
+            raw, {"revision", "options", "groups", "presentation"},
+            f"taxonomy `{taxonomy_id}`"
+        )
         options: list[Option] = []
         groups: list[OptionGroup] = []
         for group_value in raw.get("groups") or ():
@@ -386,7 +389,11 @@ def _authoring_taxonomies(payload: Mapping[str, Any]) -> tuple[Taxonomy, ...]:
             f"taxonomy `{taxonomy_id}`",
         )
         built.append(
-            Taxonomy(str(taxonomy_id), deduped, tuple(groups), int(raw.get("revision") or 1))
+            Taxonomy(
+                str(taxonomy_id), deduped, tuple(groups),
+                int(raw.get("revision") or 1),
+                dict(_mapping(raw.get("presentation") or {}, "taxonomy presentation")),
+            )
         )
     return tuple(built)
 
@@ -400,12 +407,13 @@ def _authoring_subordinate(
     if raw is None:
         return None
     item = _mapping(raw, kind)
-    _reject_unknown(item, {"field", "prompt", "show_if"}, kind)
+    _reject_unknown(item, {"field", "prompt", "show_if", "required"}, kind)
     return FieldDefinition(
         id=str(item.get("field") or ""),
         revision=revision,
         prompt=str(item.get("prompt") or item.get("field") or ""),
         input_type=InputType.TEXT,
+        required=_bool(item.get("required"), False),
         visible_if=_authored_condition(item.get("show_if")),
         independently_answerable=False,
         metadata={"relationship": kind},
@@ -438,6 +446,12 @@ def _authoring_field(
         "max_select",
         "min_items",
         "routing",
+        "allow_skip",
+        "selection_feedback",
+        "suggestion_label",
+        "detail_prompt",
+        "detail_placeholder",
+        "voice_note",
     }
     field_id = str(raw.get("id") or raw.get("field") or "").strip()
     _reject_unknown(raw, allowed, f"question `{field_id or '?'}`")
@@ -495,24 +509,38 @@ def _authoring_field(
         value = _mapping(raw.get("capabilities"), f"question `{field_id}` capabilities")
         _reject_unknown(
             value,
-            {"manual_text", "geolocation_lookup", "geolocation_requires_user_action"},
+            {
+                "manual_text", "geolocation_lookup",
+                "geolocation_requires_user_action", "lookup_trigger",
+                "lookup_behavior",
+            },
             f"question `{field_id}` capabilities",
         )
         capabilities = LocationCapabilities(
             _bool(value.get("manual_text"), False),
             _bool(value.get("geolocation_lookup"), False),
             _bool(value.get("geolocation_requires_user_action"), True),
+            str(value.get("lookup_trigger") or "explicit_action"),
+            str(value.get("lookup_behavior") or "suggest_and_confirm_match"),
         )
     routes = []
     for action, route_value in _mapping(
         raw.get("routing") or {}, f"question `{field_id}` routing"
     ).items():
         route = _mapping(route_value, f"question `{field_id}` route")
-        _reject_unknown(route, {"when"}, f"question `{field_id}` route")
+        _reject_unknown(
+            route, {"when", "toast", "scroll_to"},
+            f"question `{field_id}` route"
+        )
         routes.append(
             TerminalRoute(
                 _authored_condition(route.get("when"), default_field=field_id),  # type: ignore[arg-type]
                 "end" if str(action) == "end_session" else str(action),
+                {
+                    key: route[key]
+                    for key in ("toast", "scroll_to")
+                    if key in route
+                },
             )
         )
     values = dict(
@@ -532,6 +560,14 @@ def _authoring_field(
         visible_if=_authored_condition(raw.get("show_if")),
         routes=tuple(routes),
         item_fields=item_fields,
+        presentation={
+            key: raw[key]
+            for key in (
+                "selection_feedback", "suggestion_label", "detail_prompt",
+                "detail_placeholder", "voice_note"
+            )
+            if key in raw
+        },
         independently_answerable=not nested,
         shortcuts=shortcuts,
         capabilities=capabilities,
@@ -543,7 +579,7 @@ def _authoring_field(
         return FieldDefinition(**values)
     return QuestionDefinition(
         **values,
-        skippable=True,
+        skippable=_bool(raw.get("allow_skip"), True),
         flaggable=True,
         metadata={
             "step_id": str(raw.get("step") or ""),
@@ -710,6 +746,9 @@ def _load_questionnaire_probe(payload: Mapping[str, Any]) -> ProbeDefinition:
             "flag",
             "review_editable",
             "mobile",
+            "validation",
+            "submission_preview",
+            "authentication",
         },
         "interaction",
     )
@@ -794,7 +833,10 @@ def _load_questionnaire_probe(payload: Mapping[str, Any]) -> ProbeDefinition:
         fingerprint_axes=tuple(fingerprint_axes),
         editorial_review=tuple(editorial_review),
         presentation_hints={
-            "mobile": dict(_mapping(interaction.get("mobile") or {}, "interaction.mobile"))
+            key: dict(_mapping(interaction.get(key) or {}, f"interaction.{key}"))
+            for key in (
+                "mobile", "validation", "submission_preview", "authentication"
+            )
         },
     )
     title = str(

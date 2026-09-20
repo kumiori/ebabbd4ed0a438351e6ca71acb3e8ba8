@@ -800,6 +800,7 @@ def test_montreal_v3_presentation_and_resolution_contract_is_canonical():
     assert value.taxonomy("functions").presentation["groups"] == "expanders"
     assert value.question("base_location").capabilities.lookup_trigger == "after_text_input"
     assert value.question("knowledge_offer").companions[0].required is False
+    assert value.question("dietary_preferences").other.required is True
     action = value.question("future_conditions").item_fields[0]
     assert action.presentation["detail_prompt"] == "Add details"
     assert value.authoring.presentation_hints["submission_preview"]["enabled"] is True

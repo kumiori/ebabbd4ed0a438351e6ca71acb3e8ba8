@@ -483,6 +483,14 @@ def _authoring_field(
         enabled=free_text is not None,
         field_id=free_text.id if free_text else "",
         label=free_text.prompt if free_text else "",
+        required=(
+            _bool(
+                _mapping(raw.get("free_text"), "free_text").get("required"),
+                True,
+            )
+            if free_text
+            else False
+        ),
         visible_if=free_text.visible_if if free_text else None,
     )
     item_fields = tuple(

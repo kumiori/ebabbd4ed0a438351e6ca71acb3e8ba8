@@ -22,7 +22,7 @@ python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-`0.3.0.dev1` is an untagged integration build intended for pinned-commit
+`0.3.0.dev2` is an untagged integration build intended for pinned-commit
 consumption by applications while the representation and resolution contracts
 are consolidated toward the eventual `0.3.0` release.
 
@@ -55,8 +55,9 @@ print(runtime.review())
 ## Resolution semantics
 
 Every top-level answerable interaction is unresolved until the participant uses
-one of three canonical routes: Answer through the application's CTA, Skip, or
-Flag. An answer is not intrinsically mandatory. A CTA should call
+Answer through the application's CTA or Skip. An answer is not intrinsically
+mandatory. Flag is an orthogonal annotation and does not resolve an unanswered
+question. A CTA should call
 `validate_resolution()`; `required` constrains the structure of an answer when
 the Answer route is chosen, rather than disabling Skip or Flag.
 
@@ -69,11 +70,10 @@ runtime.skip(
 runtime.validate_resolution("confidence")
 ```
 
-Skip and Flag are distinct append-only events. Their default controlled
+Skip and Flag are distinct append-only events. Their authored controlled
 vocabularies preserve the Prediction reason codes and labels; both accept an
-optional 500-character note. A Flag may coexist with an Answer or Skip, while a
-flag-only interaction is resolved without being classified as answered or
-skipped. Nested controls inherit their parent's resolution unless their field
+optional 500-character note. A Flag may coexist with an Answer or Skip; a
+flag-only interaction remains unanswered. Nested controls inherit their parent's resolution unless their field
 definition explicitly sets `independently_answerable: true`.
 
 The canonical classes can also be constructed directly for a Python-first Probe.

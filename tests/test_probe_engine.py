@@ -94,7 +94,13 @@ def test_markdown_requires_front_matter_and_complete_references():
     with pytest.raises(DefinitionError, match="Unresolved"):
         load_markdown_probe(MARKDOWN, question_catalogue={})
     with pytest.raises(DefinitionError, match="Unused"):
-        load_markdown_probe(MARKDOWN, question_catalogue={**load_question_catalogue(CATALOGUE), "extra": next(iter(load_question_catalogue(CATALOGUE).values()))})
+        load_markdown_probe(
+            MARKDOWN,
+            question_catalogue={
+                **load_question_catalogue(CATALOGUE),
+                "extra": next(iter(load_question_catalogue(CATALOGUE).values())),
+            },
+        )
 
 
 def test_montreal_fixture_is_lossless_canonical_probe():
@@ -105,12 +111,25 @@ def test_montreal_fixture_is_lossless_canonical_probe():
     assert value.revision == 1
     assert len(value.questions) == 26
     assert [section.id for section in value.sections] == [
-        "participation", "portrait", "exchange", "future"
+        "participation",
+        "portrait",
+        "exchange",
+        "future",
     ]
     assert [step.id for step in value.steps] == [
-        "consent", "participation", "portrait", "project", "exchange_offer",
-        "exchange_need", "friction", "inspiration", "future_outcome",
-        "future_effects", "future_conditions", "future_contribution", "scenario_role",
+        "consent",
+        "participation",
+        "portrait",
+        "project",
+        "exchange_offer",
+        "exchange_need",
+        "friction",
+        "inspiration",
+        "future_outcome",
+        "future_effects",
+        "future_conditions",
+        "future_contribution",
+        "scenario_role",
     ]
     participation = next(step for step in value.steps if step.id == "participation")
     assert value.step("participation") is participation
@@ -123,7 +142,10 @@ def test_montreal_fixture_is_lossless_canonical_probe():
     assert offer.taxonomy_id == need.taxonomy_id == "commons_ai_topics"
     assert value.taxonomy(offer.taxonomy_id) is value.taxonomy(need.taxonomy_id)
     assert [group.id for group in value.taxonomy("commons_ai_topics").groups] == [
-        "governance", "access", "infrastructure", "collective_action"
+        "governance",
+        "access",
+        "infrastructure",
+        "collective_action",
     ]
     assert offer.presentation == {"group_by": "taxonomy_group"}
     assert offer.other.field_id == "knowledge_offer_other"
@@ -152,31 +174,36 @@ def test_montreal_fixture_is_lossless_canonical_probe():
     assert probe_from_dict(value.to_dict()) == value
 
 
-def test_authored_yaml_requires_schema_and_rejects_widget_ontology():
+def test_authored_yaml_requires_schema_and_valid_grouped_fields():
     with pytest.raises(DefinitionError, match="probe-authoring/v1"):
         load_yaml_probe({"probe": {"id": "implicit"}})
     invalid = {
         "schema": "probe-authoring/v1",
         "probe": {"id": "invalid", "revision": 1, "title": "Invalid"},
-        "steps": [{
-            "id": "s", "title": "S", "body": "", "cta": "Next",
-            "fields": [{
-                "id": "q", "revision": 1, "prompt": "Q?", "type": "grouped_multi"
-            }],
-        }],
+        "steps": [
+            {
+                "id": "s",
+                "title": "S",
+                "body": "",
+                "cta": "Next",
+                "fields": [{"id": "q", "revision": 1, "prompt": "Q?", "type": "grouped_multi"}],
+            }
+        ],
     }
-    with pytest.raises(DefinitionError, match="composed field semantics"):
+    with pytest.raises(DefinitionError, match="requires at least one option"):
         load_yaml_probe(invalid)
 
 
 def test_repeatable_answers_validate_recursively_and_keep_item_identity():
     value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
     runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
-    answer = [{
-        "id": "condition-1",
-        "action": "Former une coalition",
-        "actors": ["cultural_institution", "commons_movement"],
-    }]
+    answer = [
+        {
+            "id": "condition-1",
+            "action": "Former une coalition",
+            "actors": ["cultural_institution", "commons_movement"],
+        }
+    ]
     runtime.answer("future_conditions", answer)
     assert runtime.review()[value.question_order.index("future_conditions")].value == answer
 
@@ -195,7 +222,8 @@ def test_section_boundary_records_checkpoint_and_named_sync_point_only():
     store = InMemoryTrajectoryStore()
     runtime.reach_section_boundary("exchange", store)
     assert [event.kind.value for event in runtime.trajectory.events] == [
-        "checkpoint", "sync_point_reached"
+        "checkpoint",
+        "sync_point_reached",
     ]
     assert runtime.trajectory.events[-1].metadata["sync_point"] == "knowledge_exchange"
     assert store.checkpoint_calls == 1
@@ -218,7 +246,9 @@ def test_answer_skip_flag_and_review_are_distinct_and_append_only():
     runtime.flag("confidence", reason="positive")
     runtime.skip("challenge", reason="not applicable")
     assert [event.kind.value for event in runtime.trajectory.events] == [
-        "answered", "flagged", "skipped"
+        "answered",
+        "flagged",
+        "skipped",
     ]
     review = runtime.review()
     assert review[0].value == "high" and review[0].flags == ("positive",)
@@ -265,8 +295,12 @@ def test_previous_skip_is_revision_aware():
     runtime = ProbeRuntime(probe(), participant_id="p1", scope_id="scope")
     runtime.skip("confidence")
     current = probe(revision=2, confidence_revision=2, reask=True)
-    resumed = ProbeRuntime.hydrate(current, runtime.trajectory, participant_id="p1", scope_id="scope")
-    assert resumed.reconciliation().questions[0].state == ReconciliationState.RESKIP_OR_ANSWER_REQUIRED
+    resumed = ProbeRuntime.hydrate(
+        current, runtime.trajectory, participant_id="p1", scope_id="scope"
+    )
+    assert (
+        resumed.reconciliation().questions[0].state == ReconciliationState.RESKIP_OR_ANSWER_REQUIRED
+    )
 
 
 def test_new_question_and_current_order_drive_pending():
@@ -275,10 +309,20 @@ def test_new_question_and_current_order_drive_pending():
     runtime.answer("confidence", "high")
     runtime.skip("challenge")
     catalogue = deepcopy(CATALOGUE)
-    catalogue["new"] = {"title": "New?", "revision": 1, "mode": "single_choice", "required": True, "options": ["yes", "no"]}
-    markdown = MARKDOWN.replace("{{ question: confidence }}", "{{ question: new }}\n\n{{ question: confidence }}").replace("revision: 1", "revision: 2", 1)
+    catalogue["new"] = {
+        "title": "New?",
+        "revision": 1,
+        "mode": "single_choice",
+        "required": True,
+        "options": ["yes", "no"],
+    }
+    markdown = MARKDOWN.replace(
+        "{{ question: confidence }}", "{{ question: new }}\n\n{{ question: confidence }}"
+    ).replace("revision: 1", "revision: 2", 1)
     current = load_markdown_probe(markdown, question_catalogue=load_question_catalogue(catalogue))
-    resumed = ProbeRuntime.hydrate(current, runtime.trajectory, participant_id="p1", scope_id="scope")
+    resumed = ProbeRuntime.hydrate(
+        current, runtime.trajectory, participant_id="p1", scope_id="scope"
+    )
     assert resumed.pending() == ("new",)
     assert resumed.reconciliation().currently_complete is False
 
@@ -288,20 +332,31 @@ def test_retired_question_is_historical_but_not_pending():
         {
             "schema": "probe-authoring/v1",
             "probe": {"id": "retirement", "revision": 2, "title": "Retirement"},
-            "steps": [{
-                "id": "questions", "title": "Questions", "body": "", "cta": "Next",
-                "fields": [
-                    {
-                        "id": "confidence", "revision": 1, "prompt": "Confidence?",
-                        "type": "single", "options": ["low", "high"],
-                    },
-                    {
-                        "id": "challenge", "revision": 1, "prompt": "Challenge?",
-                        "type": "multi", "options": ["data", "assumptions"],
-                        "status": "retired",
-                    },
-                ],
-            }],
+            "steps": [
+                {
+                    "id": "questions",
+                    "title": "Questions",
+                    "body": "",
+                    "cta": "Next",
+                    "fields": [
+                        {
+                            "id": "confidence",
+                            "revision": 1,
+                            "prompt": "Confidence?",
+                            "type": "single",
+                            "options": ["low", "high"],
+                        },
+                        {
+                            "id": "challenge",
+                            "revision": 1,
+                            "prompt": "Challenge?",
+                            "type": "multi",
+                            "options": ["data", "assumptions"],
+                            "status": "retired",
+                        },
+                    ],
+                }
+            ],
         }
     )
     runtime = ProbeRuntime(current, participant_id="p1", scope_id="scope")
@@ -314,10 +369,14 @@ def test_narrative_only_revision_creates_no_pending_work():
     runtime.answer("confidence", "high")
     runtime.skip("challenge")
     current = load_markdown_probe(
-        MARKDOWN.replace("revision: 1", "revision: 2", 1).replace("Readable prose", "Revised prose"),
+        MARKDOWN.replace("revision: 1", "revision: 2", 1).replace(
+            "Readable prose", "Revised prose"
+        ),
         question_catalogue=load_question_catalogue(CATALOGUE),
     )
-    resumed = ProbeRuntime.hydrate(current, runtime.trajectory, participant_id="p1", scope_id="scope")
+    resumed = ProbeRuntime.hydrate(
+        current, runtime.trajectory, participant_id="p1", scope_id="scope"
+    )
     assert resumed.pending() == ()
 
 
@@ -383,14 +442,16 @@ def test_composed_other_answer_survives_trajectory_round_trip():
     runtime.answer("dietary_preferences", answer)
     restored = trajectory_from_dict(runtime.trajectory.to_dict())
     assert restored.events[-1].value == answer
-    with pytest.raises(RuntimeError, match="requires other text"):
-        runtime.answer("dietary_preferences", {"selected": ["other"]})
+    runtime.answer("dietary_preferences", {"selected": ["other"]})
 
 
 def test_representation_definitions_and_results_round_trip():
     value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
     assert [item.id for item in value.representations] == [
-        "exchange_landscape", "friction_landscape", "future_action_map", "participant_portrait"
+        "exchange_landscape",
+        "friction_landscape",
+        "future_action_map",
+        "participant_portrait",
     ]
     assert probe_from_dict(value.to_dict()) == value
     first = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
@@ -408,8 +469,15 @@ def test_representation_definitions_and_results_round_trip():
         value, "friction_landscape", [first.trajectory, second.trajectory, third.trajectory]
     )
     assert distribution.denominator.to_dict() == {
-        "cohort": 3, "eligible": 3, "resolved": 3, "answered": 1, "selected": 1,
-        "skipped": 1, "flagged": 1, "deferred": 1, "unanswered": 0,
+        "cohort": 3,
+        "eligible": 3,
+        "resolved": 3,
+        "answered": 1,
+        "selected": 1,
+        "skipped": 1,
+        "flagged": 1,
+        "deferred": 1,
+        "unanswered": 0,
     }
     assert distribution.data["values"] == {"funding": {"count": 1, "proportion": 1.0}}
     assert representation_result_from_dict(distribution.to_dict()) == distribution
@@ -427,7 +495,9 @@ def test_results_composition_keeps_authored_commentary_distinct():
     runtime.answer("friction", ["funding"])
     projection = evaluate_results(value, [runtime.trajectory])
     assert projection.title == "Ce que nous voyons"
-    block = next(item for item in projection.blocks if item.representation_id == "friction_landscape")
+    block = next(
+        item for item in projection.blocks if item.representation_id == "friction_landscape"
+    )
     assert block.commentary.kind == "authored"
     assert "frictions" in block.commentary.markdown.lower()
     assert block.result.representation_id == "friction_landscape"
@@ -458,7 +528,10 @@ def test_continue_validates_resolution_not_a_mandatory_answer():
         reason_codes=["interesting_question", "missing_option"],
         note="Worth revisiting.",
     )
-    assert runtime.validate_resolution("challenge").state == ResolutionState.FLAGGED
+    with pytest.raises(RuntimeError, match="unresolved"):
+        runtime.validate_resolution("challenge")
+    runtime.answer("challenge", ["data"])
+    assert runtime.validate_resolution("challenge").flagged is True
     assert runtime.pending() == ()
     assert runtime.reconciliation().currently_complete is True
 
@@ -471,12 +544,23 @@ def test_continue_validates_resolution_not_a_mandatory_answer():
 def test_resolution_reason_taxonomies_preserve_prediction_vocabulary():
     value = probe()
     assert [item.value for item in value.resolution.skip_reasons.options] == [
-        "not_relevant", "dont_know", "prefer_not_to_answer", "dont_understand",
-        "no_option_fits", "too_difficult_briefly", "other",
+        "not_relevant",
+        "dont_know",
+        "prefer_not_to_answer",
+        "dont_understand",
+        "no_option_fits",
+        "too_difficult_briefly",
+        "other",
     ]
     assert [item.value for item in value.resolution.flag_reasons.options] == [
-        "interesting_question", "useful_for_coordination", "thought_provoking",
-        "well_framed", "incomplete", "misleading", "too_narrow", "unclear",
+        "interesting_question",
+        "useful_for_coordination",
+        "thought_provoking",
+        "well_framed",
+        "incomplete",
+        "misleading",
+        "too_narrow",
+        "unclear",
         "missing_option",
     ]
     runtime = ProbeRuntime(value, participant_id="p1", scope_id="scope")
@@ -496,19 +580,26 @@ def test_nested_fields_inherit_parent_resolution_unless_independent():
     assert runtime.resolution("action").inherited_from == "future_conditions"
     assert runtime.resolution("actors").state == ResolutionState.UNRESOLVED
     runtime.flag("actors", reason_codes=["unclear"])
-    assert runtime.validate_resolution("actors").state == ResolutionState.FLAGGED
+    with pytest.raises(RuntimeError, match="unresolved"):
+        runtime.validate_resolution("actors")
+    runtime.skip("actors", reason_codes=["prefer_not_to_answer"])
+    assert runtime.validate_resolution("actors").state == ResolutionState.SKIPPED
 
 
-def test_flag_only_resolution_is_not_counted_as_unanswered():
+def test_flag_only_state_remains_unanswered_and_orthogonal():
     value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
     runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
     runtime.flag("friction", reason_codes=["interesting_question"])
     result = evaluate_representation(value, "friction_landscape", [runtime.trajectory])
-    assert result.denominator.resolved == 1
+    assert result.denominator.resolved == 0
     assert result.denominator.answered == 0
     assert result.denominator.flagged == 1
-    assert result.denominator.unanswered == 0
-    row = next(item for item in project_response_field(value, [runtime.trajectory]) if item.question_id == "friction")
+    assert result.denominator.unanswered == 1
+    row = next(
+        item
+        for item in project_response_field(value, [runtime.trajectory])
+        if item.question_id == "friction"
+    )
     assert row.state == "flagged" and row.value is None
 
 
@@ -518,3 +609,229 @@ def test_conditional_fields_are_not_resolution_obligations_or_denominator_eligib
     runtime.answer("participation_capacity", "individual")
     assert runtime.resolution("organization_size").state == ResolutionState.INELIGIBLE
     assert "organization_size" not in runtime.pending()
+
+
+def test_montreal_v2_authored_contract_compiles_and_round_trips():
+    source = Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml"
+    authored = __import__("yaml").safe_load(source.read_text())
+    value = load_yaml_probe(source)
+
+    assert value.id == "montreal_communs_data_ai_short_2026"
+    assert value.revision == 2
+    assert value.authoring.step_order == (
+        "welcome",
+        "participation_information",
+        "participation",
+        "portrait",
+        "organisation",
+        "project",
+        "exchange_offer",
+        "exchange_need",
+        "friction",
+        "inspiration",
+        "future_intro",
+        "future_outcome",
+        "future_effects",
+        "future_conditions",
+        "future_contribution",
+        "scenario_position",
+        "review",
+        "done",
+    )
+    assert len(value.steps) == 18
+    assert {
+        step.id: {"title": step.title, "body": step.body, "cta": step.cta} for step in value.steps
+    } == authored["step_copy"]
+    assert len(value.questions) == 24
+    assert [question.id for question in value.questions] == [
+        question["field"] for question in authored["questions"]
+    ]
+    assert [taxonomy.id for taxonomy in value.taxonomies] == list(authored["taxonomies"])
+    assert [(section.id, section.step_ids) for section in value.sections] == [
+        (section["id"], tuple(section["steps"])) for section in authored["sections"]
+    ]
+    assert value.sections[2].sync_point == "knowledge_exchange"
+    assert value.sections[3].sync_point == "future_action"
+    assert value.authoring.profile_fields == (
+        "name",
+        "participation_position",
+        "base_location",
+        "sectors",
+        "functions",
+        "organisation_name",
+        "organisation_size",
+        "organisation_territory",
+    )
+    assert len(value.authoring.editorial_review) == 2
+    assert probe_from_dict(value.to_dict()) == value
+
+
+def test_montreal_v2_nested_authoring_grammar_rejects_unknown_semantics():
+    source = Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml"
+    payload = __import__("yaml").safe_load(source.read_text())
+    payload["step_copy"]["welcome"]["renderer_magic"] = True
+    with pytest.raises(DefinitionError, match="Unsupported semantics in step_copy.welcome"):
+        load_yaml_probe(payload)
+
+
+def test_montreal_v2_field_and_interaction_grammar_is_explicit():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
+
+    assert {question.input_type.value for question in value.questions} == {
+        "text",
+        "url",
+        "location",
+        "single",
+        "single_with_other",
+        "grouped_multi",
+        "multi_with_other",
+        "repeatable_group",
+    }
+    availability = value.question("availability")
+    assert [group.id for group in availability.option_groups] == ["oct28", "oct29"]
+    assert availability.shortcuts[0].id == "both_full_days"
+    assert availability.shortcuts[0].select == (
+        "oct28_am_online",
+        "oct28_pm_inrs",
+        "oct29_am_inrs",
+        "oct29_pm_inrs",
+    )
+    dietary = value.question("dietary_preferences")
+    assert dietary.free_text_field.id == "dietary_preferences_detail"
+    assert dietary.free_text_field.visible_if.operator == "any"
+    assert dietary.other.field_id == "dietary_preferences_detail"
+    offer = value.question("knowledge_offer")
+    assert offer.taxonomy_id == "commons_ai_topics"
+    assert offer.companions[0].id == "knowledge_offer_example"
+    assert offer.companions[0].independently_answerable is False
+    repeatable = value.question("future_conditions")
+    assert repeatable.input_type.value == "repeatable_group"
+    assert [field.id for field in repeatable.item_fields] == ["action", "actors"]
+    assert repeatable.item_fields[0].input_type.value == "text_with_suggestions"
+    assert repeatable.item_fields[1].free_text_field.id == "actors_other"
+    location = value.question("base_location")
+    assert location.capabilities.to_dict() == {
+        "manual_text": True,
+        "geolocation_lookup": True,
+        "geolocation_requires_user_action": True,
+    }
+    organisation = value.question("organisation_name")
+    assert organisation.visible_if.operator == "any"
+    assert {clause.value for clause in organisation.visible_if.clauses} == {"organisation", "both"}
+    assert value.question("participation_acknowledgement").routes[0].action == "end"
+
+    assert value.resolution.actions == ("answer", "skip", "flag")
+    assert [item.value for item in value.resolution.skip_reasons.options] == [
+        "not_applicable",
+        "dont_know",
+        "prefer_not",
+        "cannot_answer",
+        "other",
+    ]
+    assert [item.value for item in value.resolution.flag_reasons.options][:4] == [
+        "interesting",
+        "useful",
+        "thought_provoking",
+        "well_framed",
+    ]
+    assert value.authoring.deferrable_fields[-1] == "scenario_position"
+    assert [axis.id for axis in value.authoring.fingerprint_axes] == [
+        "sectors",
+        "functions",
+        "offers",
+        "needs",
+        "frictions",
+    ]
+    assert [item.id for item in value.representations] == [
+        "participation_overview",
+        "participant_portrait",
+        "knowledge_exchange",
+        "future_landscape",
+    ]
+    assert value.representations[0].title == "Notre participation"
+
+
+def test_montreal_v2_representative_answers_and_recursive_resolution():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal-2026")
+
+    runtime.answer("availability", ["oct28_am_online", "oct29_am_inrs"])
+    runtime.answer(
+        "dietary_preferences",
+        {"selected": ["vegetarian", "other"], "other": {"value": "Sans noix"}},
+    )
+    runtime.answer(
+        "knowledge_offer",
+        {
+            "selected": ["commons_principles"],
+            "companions": {"knowledge_offer_example": {"value": "Un registre partagé"}},
+        },
+    )
+    runtime.answer(
+        "base_location",
+        {
+            "display_label": "Montréal, Québec, Canada",
+            "locality": "Montréal",
+            "region": "Québec",
+            "country": "Canada",
+            "country_code": "CA",
+            "place_id": "opencage:montreal-qc-ca",
+            "latitude": 45.5019,
+            "longitude": -73.5674,
+        },
+    )
+    runtime.skip("frictions", reason_codes=["not_applicable"], note="Pas dans ce contexte")
+    runtime.answer("future_outcome", ["shared_resource"])
+    runtime.flag("future_outcome", reason_codes=["interesting", "well_framed"])
+    runtime.answer(
+        "future_conditions",
+        [
+            {
+                "id": "action-1",
+                "action": "Former une coalition",
+                "actors": {
+                    "selected": ["government", "other"],
+                    "other": {"value": "Bibliothèque municipale"},
+                },
+            }
+        ],
+    )
+    runtime.answer("participation_position", "organisation")
+    runtime.answer("organisation_name", "Communs Montréal")
+
+    assert runtime.resolution("knowledge_offer_example").inherited_from == "knowledge_offer"
+    assert runtime.resolution("actors_other").inherited_from == "future_conditions"
+    assert runtime.resolution("future_outcome").state == ResolutionState.ANSWERED
+    assert runtime.resolution("future_outcome").flagged is True
+    assert runtime.resolution("organisation_name").state == ResolutionState.ANSWERED
+    future = evaluate_representation(value, "future_landscape", [runtime.trajectory])
+    assert len(future.data["components"]) == 5
+    outcome = future.data["components"][0]
+    assert outcome["denominator"]["answered"] == 1
+    assert outcome["denominator"]["flagged"] == 1
+    restored = trajectory_from_dict(runtime.trajectory.to_dict())
+    assert restored == runtime.trajectory
+
+
+def test_montreal_v2_review_edit_hydrate_modify_and_persist():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
+    store = InMemoryTrajectoryStore()
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal-2026")
+    runtime.answer("name", "Ada")
+    runtime.checkpoint(store)
+
+    resumed = ProbeRuntime.hydrate(
+        value,
+        trajectory_from_dict(runtime.trajectory.to_dict()),
+        participant_id="p1",
+        scope_id="montreal-2026",
+    )
+    resumed.answer("name", "Ada Lovelace")
+    resumed.finalise(store, idempotency_key="montreal-p1-r2")
+    saved = store.load(resumed.trajectory.participation.id)
+
+    assert [event.value for event in saved.events if event.question_id == "name"] == [
+        "Ada",
+        "Ada Lovelace",
+    ]
+    assert resumed.review()[value.answerable_order.index("name")].value == "Ada Lovelace"

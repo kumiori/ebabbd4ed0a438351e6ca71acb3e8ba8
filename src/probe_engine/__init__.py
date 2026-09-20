@@ -12,7 +12,13 @@ from .model import (
     Condition,
     DefinitionError,
     FieldDefinition,
+    FlowModeDefinition,
+    FingerprintAxis,
+    EditorialReviewItem,
+    AuthoringDefinition,
     InputType,
+    LocationCapabilities,
+    LocationValue,
     NarrativeBlock,
     Option,
     OptionGroup,
@@ -22,6 +28,7 @@ from .model import (
     QuestionDefinition,
     RevisionLineage,
     RepresentationDefinition,
+    RepresentationComponent,
     RepresentationScope,
     RepresentationSource,
     RepresentationType,
@@ -30,6 +37,7 @@ from .model import (
     ResultsDefinition,
     ReasonTaxonomy,
     ResolutionDefinition,
+    SelectionShortcut,
     SectionBlock,
     SectionDefinition,
     StepDefinition,
@@ -70,7 +78,7 @@ from .runtime import (
 )
 from .schema import SchemaError, probe_from_dict, trajectory_from_dict
 
-__version__ = "0.3.0.dev1"
+__version__ = "0.3.0.dev2"
 
 __all__ = [
     "Block",
@@ -79,8 +87,14 @@ __all__ = [
     "DirectiveMarkdownParser",
     "EventKind",
     "FieldDefinition",
+    "FlowModeDefinition",
+    "FingerprintAxis",
+    "EditorialReviewItem",
+    "AuthoringDefinition",
     "InMemoryTrajectoryStore",
     "InputType",
+    "LocationCapabilities",
+    "LocationValue",
     "MarkdownParser",
     "NarrativeBlock",
     "OperationalSummary",
@@ -100,6 +114,7 @@ __all__ = [
     "ReviewItem",
     "RevisionLineage",
     "RepresentationDefinition",
+    "RepresentationComponent",
     "RepresentationScope",
     "RepresentationSource",
     "RepresentationType",
@@ -108,6 +123,7 @@ __all__ = [
     "ResultsDefinition",
     "ReasonTaxonomy",
     "ResolutionDefinition",
+    "SelectionShortcut",
     "Denominator",
     "RepresentationResult",
     "ResultsBlock",

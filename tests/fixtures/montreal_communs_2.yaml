@@ -1,0 +1,1142 @@
+schema: probe-authoring/v1
+questionnaire:
+  id: montreal_communs_data_ai_short_2026
+  revision: 2
+  status: review
+  language: fr
+  default_mode: standard
+  show_mode_selection: false
+  show_welcome_step: true
+  identity_position: first
+  review:
+    change_note: Compilation éditoriale de la version courte. Texte source préservé; grammaire je/nous; aucune réponse substantielle
+      obligatoire; exemples convertis en choix + Autre; Q19 structurée étape→acteur·ices; Q21 remplacée par une position réelle.
+step_order:
+- welcome
+- participation_information
+- participation
+- portrait
+- organisation
+- project
+- exchange_offer
+- exchange_need
+- friction
+- inspiration
+- future_intro
+- future_outcome
+- future_effects
+- future_conditions
+- future_contribution
+- scenario_position
+- review
+- done
+flow_modes:
+  standard:
+    title: Communs de données et IA
+    detail: ~20 minutes
+    steps:
+    - participation_information
+    - participation
+    - portrait
+    - organisation
+    - project
+    - exchange_offer
+    - exchange_need
+    - friction
+    - inspiration
+    - future_intro
+    - future_outcome
+    - future_effects
+    - future_conditions
+    - future_contribution
+    - scenario_position
+sections:
+- id: participation
+  title: Participation
+  steps:
+  - participation_information
+  - participation
+  process:
+    checkpoint: true
+- id: portrait
+  title: Portrait
+  steps:
+  - portrait
+  - organisation
+  - project
+  process:
+    checkpoint: true
+- id: exchange
+  title: Partage et besoins de connaissances
+  steps:
+  - exchange_offer
+  - exchange_need
+  - friction
+  - inspiration
+  process:
+    checkpoint: true
+    sync_point: knowledge_exchange
+- id: future
+  title: Vision du futur
+  steps:
+  - future_intro
+  - future_outcome
+  - future_effects
+  - future_conditions
+  - future_contribution
+  - scenario_position
+  process:
+    checkpoint: true
+    sync_point: future_action
+step_copy:
+  welcome:
+    title: Communs de données et IA
+    body: 'Pour finaliser notre inscription au Forum Communs de données et IA (28–29 octobre 2026, INRS), prenons environ
+      20 minutes pour répondre à ces questions.
+
+
+      Cette démarche poursuit deux objectifs :
+
+      1. Mieux nous connaître : situer nos champs d’activité, ce que nous pouvons partager, ce que nous recherchons et nos
+      visions du futur.
+
+      2. Documenter un projet, si applicable : lorsqu’une organisation culturelle, patrimoniale ou éducative porte un projet
+      lié à la thématique du Forum, nous pouvons l’intégrer à la base de connaissances qui accompagne l’événement, notamment
+      sous l’angle des données, ressources, pratiques, gouvernance, licences, infrastructures et modèles économiques.
+
+
+      Plus largement, nos réponses permettront de cartographier le réseau d’acteurs en présence, les collaborations établies
+      et les initiatives collectives existantes.
+
+
+      Une version courte est proposée à l’ensemble des personnes participantes; une version longue pourra approfondir les
+      projets documentés.
+
+
+      Sauf indication contraire, plusieurs choix sont possibles. Nous pouvons passer ou signaler chaque question. Nous pourrons
+      relire, modifier, réaligner et faire évoluer nos réponses.'
+    cta: Commencer
+  participation_information:
+    title: Informations sur notre participation
+    body: 'Les informations recueillies serviront à préparer l’organisation du Forum Communs de données et IA des 28–29 octobre
+      2026. Elles pourront également nourrir des publications qui découleront de cet événement (synthèse, article scientifique).
+
+
+      Nos noms ne seront pas mentionnés dans les publications qui découleront du projet.
+
+
+      Les réponses sont annoncées comme conservées de façon sécurisée durant 5 ans et accessibles à l’équipe de recherche.
+      Certaines informations d’identification professionnelle pourront être partagées avec les autres personnes participantes
+      afin de faciliter le réseautage.
+
+
+      Nous sommes libres de répondre ou non à chaque question et pouvons interrompre le parcours. Si nous souhaitons retirer
+      nos réponses, nous pouvons contacter les responsables ci-dessous.
+
+
+      Responsables : Nathalie Casemajor, professeure à l’INRS, nathalie.casemajor@inrs.ca ; Marta Severo, professeure à l’Université
+      Paris Nanterre, msevero@parisnanterre.fr.'
+    cta: Continuer
+  participation:
+    title: Notre participation
+    body: 'L’atelier réunit un nombre restreint de 40 personnes sélectionnées sur invitation pour un engagement actif et collectif.
+      Nous privilégions une présence aux deux journées : une disponibilité partielle peut potentiellement priver une autre
+      personne d’y participer. En cas de disponibilité limitée, l’équipe pourra reprendre contact avec nous pour préciser
+      les modalités.'
+    cta: Continuer
+  portrait:
+    title: Qui sommes-nous ?
+    body: 'Situons notre activité et, le cas échéant, notre organisation dans l’écosystème des acteurs présents au Forum.
+      Aucune réponse substantielle n’est obligatoire : chaque question peut être passée.'
+    cta: Continuer
+  organisation:
+    title: Notre organisation
+    body: Ces questions apparaissent lorsque nous participons au nom d’une organisation ou dans les deux positions.
+    cta: Continuer
+  project:
+    title: Un projet à documenter ?
+    body: Si notre organisation développe un projet de mise à disposition de données dans le contexte des usages de l’IA,
+      nous pouvons choisir de le documenter.
+    cta: Continuer
+  exchange_offer:
+    title: Ce que nous pouvons mettre en commun
+    body: 'Cartographions ce que nous pouvons partager sur les communs de données et l’IA : connaissances, expérimentations,
+      outils ou ressources.'
+    cta: Continuer
+  exchange_need:
+    title: Ce que nous recherchons
+    body: 'La même carte est utilisée dans les deux directions : ce que nous pouvons apporter et ce que nous aimerions recevoir
+      des autres.'
+    cta: Continuer
+  friction:
+    title: Ce qui freine notre capacité à avancer
+    body: Distinguons les contraintes actuelles des ressources ou connaissances que nous recherchons.
+    cta: Continuer
+  inspiration:
+    title: Ce qui nous inspire
+    body: Une initiative, un outil, une communauté ou une expérience peut ouvrir une piste inattendue.
+    cta: Continuer
+  future_intro:
+    title: Vision du futur
+    body: 'Nous cherchons ici des pistes d’action par rétroplanification à partir d’un futur souhaité pour les communs de
+      données, qui sera approfondi lors du Forum.
+
+
+      En 2027, Genève accueillera un prochain sommet international sur l’IA, dans la continuité des sommets de Bletchley Park
+      (2023), Séoul (2024), Paris (2025) et New Delhi (2026). Prenons Genève comme horizon de travail et projetons-nous au
+      lendemain de ce rendez-vous, dans un scénario favorable aux communs de données.
+
+
+      Les résultats possibles ne sont pas limités à des productions institutionnelles : ils peuvent aussi prendre la forme
+      d’une expérimentation, d’une nouvelle collaboration, d’un désaccord devenu plus clair, d’un apprentissage issu d’un
+      échec ou d’une initiative inattendue.'
+    cta: Nous projeter
+  future_outcome:
+    title: Ce que nous aimerions voir émerger
+    body: À quoi pourrait ressembler, pour nous, un résultat positif pour les communs de données ?
+    cta: Continuer
+  future_effects:
+    title: Ce que cela changerait
+    body: Passons du résultat souhaité à ses effets concrets dans nos pratiques, projets, organisations ou domaines de recherche.
+    cta: Continuer
+  future_conditions:
+    title: Comment y arriver ?
+    body: Décomposons le chemin en étapes ou actions, et associons à chacune les acteur·ices susceptibles de la porter.
+    cta: Continuer
+  future_contribution:
+    title: Ce que je peux mettre sur la table
+    body: Quelle contribution réelle suis-je prêt·e à envisager pour rendre ce futur plus accessible ?
+    cta: Continuer
+  scenario_position:
+    title: Depuis quelle position puis-je agir ?
+    body: Plutôt que d’imposer un rôle fictionnel, partons d’abord de positions réelles. Plusieurs positions peuvent coexister.
+    cta: Continuer
+  review:
+    title: Relire nos réponses
+    body: Relisons, modifions et réalignons nos réponses. Les questions passées, les raisons de passage et les signalements
+      doivent rester visibles et éditables.
+    cta: Intégrer au paysage commun
+  done:
+    title: Merci
+    body: 'Merci d’avoir pris le temps de contribuer. Nos réponses ont été enregistrées et peuvent maintenant participer à
+      une représentation collective du Forum. Des informations pratiques concernant le déroulement de l’événement suivront.
+      Pour une précision ou une demande de retrait : nathalie.casemajor@inrs.ca et msevero@parisnanterre.fr.'
+    cta: Voir le paysage commun
+taxonomies:
+  sectors:
+    options:
+    - value: cultural_action
+      label: Action culturelle
+    - value: public_administration
+      label: Administration publique
+    - value: archives
+      label: Archives
+    - value: libraries
+      label: Bibliothèques
+    - value: education
+      label: Éducation
+    - value: museums
+      label: Musées
+    - value: research
+      label: Recherche
+    - value: open_knowledge
+      label: Savoir ouvert
+    - value: performing_arts
+      label: Spectacle vivant
+    - value: technology
+      label: Technologie / numérique
+    - value: other
+      label: Autre
+  functions:
+    groups:
+    - id: leadership
+      label: Direction et gouvernance
+      options:
+      - value: general_management
+        label: Direction générale
+      - value: scientific_management
+        label: Direction scientifique
+      - value: presidency
+        label: Présidence
+      - value: collection_management
+        label: Direction de collection
+      - value: programme_management
+        label: Direction de programme
+    - id: research_teaching
+      label: Recherche et enseignement
+      options:
+      - value: teaching
+        label: Enseignement
+      - value: research
+        label: Recherche
+      - value: graduate_studies
+        label: Études supérieures / doctorat
+      - value: postdoc
+        label: Postdoctorat
+    - id: collections
+      label: Collections
+      options:
+      - value: library
+        label: Bibliothèque
+      - value: archives
+        label: Archives
+      - value: conservation
+        label: Conservation
+      - value: documentation
+        label: Documentation
+      - value: museology
+        label: Muséologie
+    - id: data_tech
+      label: Données, technologies et infrastructures
+      options:
+      - value: data
+        label: Données
+      - value: data_architecture
+        label: Architecture / administration des données
+      - value: it
+        label: TI
+      - value: development
+        label: Développement
+      - value: data_science
+        label: Data science
+    - id: law_policy
+      label: Droit, politiques publiques et gouvernance
+      options:
+      - value: legal
+        label: Juridique
+      - value: public_policy
+        label: Politiques publiques
+      - value: data_governance
+        label: Gouvernance des données
+      - value: compliance
+        label: Conformité
+    - id: communication_publics
+      label: Communication, médiation et publics
+      options:
+      - value: communication
+        label: Communication
+      - value: cultural_mediation
+        label: Médiation culturelle
+      - value: public_relations
+        label: Relations avec les publics
+      - value: civic_engagement
+        label: Engagement citoyen
+    - id: partnerships_funding
+      label: Partenariats, développement et financement
+      options:
+      - value: partnerships
+        label: Partenariats
+      - value: development
+        label: Développement
+      - value: funding
+        label: Financement
+    - id: communities
+      label: Communautés et société civile
+      options:
+      - value: community_of_practice
+        label: Communauté de pratique
+      - value: open_knowledge
+        label: Savoir libre
+      - value: civil_society
+        label: Société civile
+      - value: volunteering
+        label: Bénévolat
+    options:
+    - value: other
+      label: Autre
+  commons_ai_topics:
+    groups:
+    - id: governance
+      label: Gouvernance des données dans le contexte de l’IA
+      options:
+      - value: commons_principles
+        label: Principes et valeurs des communs numériques
+      - value: governance_models
+        label: Modèles de gouvernance des données
+      - value: institutional_pooling
+        label: Formes institutionnelles de mutualisation de données
+      - value: socio_environmental_ai
+        label: Enjeux socio-environnementaux de l’IA
+    - id: access
+      label: Conditions d’accès aux données
+      options:
+      - value: open_data_evolution
+        label: Évolution du paradigme d’ouverture des données (open data)
+      - value: open_licenses_ai
+        label: Licences libres dans le contexte de l’IA
+      - value: differentiated_access
+        label: Contrôle de l’accès aux données selon les usages
+      - value: reciprocity
+        label: Modes de réciprocité pour l’usage des données
+    - id: infrastructure
+      label: Infrastructures d’accès aux données
+      options:
+      - value: ai_ready_datasets
+        label: Structuration des jeux de données pour leur utilisation par des systèmes d’IA
+      - value: apis_ai
+        label: API et usages liés à l’IA
+      - value: agentic_protocols
+        label: Protocoles et standards du Web agentique (ex. MCP)
+      - value: bot_traffic
+        label: Gestion du trafic des robots qui moissonnent intensivement le Web
+      - value: cloud_sovereignty
+        label: Arbitrages entre infrastructures infonuagiques commerciales et solutions souveraines
+    - id: collective_action
+      label: Stratégies d’action collective
+      options:
+      - value: coalitions
+        label: Mise en place de coalitions
+      - value: ai_contracts
+        label: Négociation avec les industries de l’IA sur les contrats d’usage des données
+      - value: public_action
+        label: Leviers d’action publique mobilisables
+      - value: advocacy
+        label: Communication, mobilisation et plaidoyer pour une évolution des politiques publiques
+    options:
+    - value: other
+      label: Autre
+  friction_types:
+    options:
+    - value: expertise
+      label: Expertise ou connaissances
+    - value: data_access
+      label: Accès aux données
+    - value: infrastructure
+      label: Infrastructure ou outils
+    - value: funding
+      label: Financement
+    - value: time
+      label: Temps / disponibilité
+    - value: partners
+      label: Partenaires / réseau
+    - value: authority
+      label: Mandat / pouvoir de décision
+    - value: legal
+      label: Cadre juridique / droits
+    - value: institutional_support
+      label: Soutien institutionnel
+    - value: coordination
+      label: Coordination entre acteurs
+    - value: other
+      label: Autre
+  actor_types:
+    options:
+    - value: government
+      label: Gouvernement ou administration publique
+    - value: international_org
+      label: Organisation internationale
+    - value: ai_company
+      label: Entreprise d’IA / acteur commercial
+    - value: cultural_institution
+      label: Institution culturelle, patrimoniale ou éducative
+    - value: commons_movement
+      label: Mouvement des communs ou du savoir libre
+    - value: funder
+      label: Financeur / organisme subventionnaire
+    - value: researcher
+      label: Chercheur·euse / monde académique
+    - value: builder
+      label: Constructeur·ice d’infrastructure / développeur·euse
+    - value: operator
+      label: Opérateur·ice / personne chargée de la mise en œuvre
+    - value: technician
+      label: Technicien·ne
+    - value: commons_steward
+      label: Steward / gardien·ne d’un commun
+    - value: artist
+      label: Artiste / créateur·ice
+    - value: civil_society
+      label: Société civile / communauté / collectif
+    - value: other
+      label: Autre
+questions:
+- step: participation_information
+  field: participation_acknowledgement
+  id: participation_acknowledgement
+  revision: 2
+  prompt: Je reconnais avoir lu et compris les informations sur notre participation.
+  input_type: single
+  required: false
+  options:
+  - value: accept
+    label: J’accepte de participer selon les modalités décrites
+  - value: read_understood
+    label: J’ai lu et compris; je souhaite poursuivre sans exprimer ici un accord supplémentaire
+  - value: decline
+    label: Je n’accepte pas
+  routing:
+    end_session:
+      when:
+        equals: decline
+- step: participation
+  field: availability
+  id: availability
+  revision: 2
+  prompt: Quand pouvons-nous être présents ?
+  context: Sélectionnons toutes les plages pendant lesquelles nous sommes disponibles.
+  input_type: grouped_multi
+  required: false
+  groups:
+  - id: oct28
+    label: 28 octobre
+    options:
+    - value: oct28_am_online
+      label: Matin · en ligne
+    - value: oct28_pm_inrs
+      label: Après-midi · en présence à l’INRS
+  - id: oct29
+    label: 29 octobre
+    options:
+    - value: oct29_am_inrs
+      label: Matin · en présence à l’INRS
+    - value: oct29_pm_inrs
+      label: Après-midi · en présence à l’INRS
+  shortcuts:
+  - id: both_full_days
+    label: Les deux journées
+    select:
+    - oct28_am_online
+    - oct28_pm_inrs
+    - oct29_am_inrs
+    - oct29_pm_inrs
+- step: participation
+  field: dietary_preferences
+  id: dietary_preferences
+  revision: 2
+  prompt: Quelles sont nos préférences ou contraintes alimentaires ?
+  context: Plusieurs choix possibles.
+  input_type: multi_with_other
+  required: false
+  options:
+  - value: omnivore
+    label: Omnivore
+  - value: vegetarian
+    label: Végétarien
+  - value: vegan
+    label: Végétalien
+  - value: no_pork
+    label: Sans porc
+  - value: gluten_free
+    label: Sans gluten
+  - value: lactose_free
+    label: Sans lactose
+  - value: food_allergy
+    label: Allergie alimentaire
+  - value: other
+    label: Autre
+  free_text:
+    field: dietary_preferences_detail
+    prompt: Précisons si nécessaire
+    show_if:
+      any:
+      - field: dietary_preferences
+        contains: food_allergy
+      - field: dietary_preferences
+        contains: other
+- step: portrait
+  field: name
+  id: name
+  revision: 2
+  prompt: Mon prénom et mon nom
+  input_type: text
+  required: false
+- step: portrait
+  field: participation_position
+  id: participation_position
+  revision: 2
+  prompt: Dans quelle(s) position(s) est-ce que je participe ?
+  input_type: single_with_other
+  required: false
+  options:
+  - value: individual
+    label: À titre individuel
+  - value: organisation
+    label: Au nom d’une organisation
+  - value: both
+    label: Dans les deux positions
+  - value: other
+    label: Autre
+  free_text:
+    field: participation_position_other
+    prompt: Précisons
+- step: portrait
+  field: base_location
+  id: base_location
+  revision: 2
+  prompt: Où est-ce que je suis principalement basé·e pour mon activité ?
+  input_type: location
+  required: false
+  capabilities:
+    manual_text: true
+    geolocation_lookup: true
+    geolocation_requires_user_action: true
+- step: portrait
+  field: sectors
+  id: sectors
+  revision: 2
+  prompt: Dans quels secteurs se situe mon activité ?
+  input_type: grouped_multi
+  required: false
+  taxonomy: sectors
+  free_text:
+    field: sectors_other
+    prompt: Autre secteur
+- step: portrait
+  field: functions
+  id: functions
+  revision: 2
+  prompt: Quelles fonctions est-ce que j’exerce ?
+  context: Plusieurs choix possibles.
+  input_type: grouped_multi
+  required: false
+  taxonomy: functions
+  free_text:
+    field: functions_other
+    prompt: Autre fonction
+- step: organisation
+  field: organisation_name
+  id: organisation_name
+  revision: 2
+  prompt: Mon organisation
+  input_type: text
+  required: false
+  show_if:
+    any:
+    - field: participation_position
+      equals: organisation
+    - field: participation_position
+      equals: both
+- step: organisation
+  field: organisation_size
+  id: organisation_size
+  revision: 2
+  prompt: Quelle est la taille de mon organisation ?
+  input_type: single
+  required: false
+  options:
+  - value: lt20
+    label: Moins de 20 personnes
+  - value: '20_99'
+    label: 20 à 99 personnes
+  - value: 100_plus
+    label: 100 personnes et plus
+  show_if:
+    any:
+    - field: participation_position
+      equals: organisation
+    - field: participation_position
+      equals: both
+- step: organisation
+  field: organisation_territory
+  id: organisation_territory
+  revision: 2
+  prompt: Sur quels territoires mon organisation opère-t-elle ?
+  input_type: multi_with_other
+  required: false
+  options:
+  - value: quebec
+    label: Québec
+  - value: other_canadian_province
+    label: Autre province canadienne
+  - value: canada
+    label: Canada
+  - value: france
+    label: France
+  - value: other_eu
+    label: Autre pays de l’Union européenne
+  - value: other
+    label: Autre
+  free_text:
+    field: organisation_territory_other
+    prompt: Précisons le territoire
+  show_if:
+    any:
+    - field: participation_position
+      equals: organisation
+    - field: participation_position
+      equals: both
+- step: project
+  field: document_project
+  id: document_project
+  revision: 2
+  prompt: Souhaitons-nous documenter un projet de notre organisation ?
+  context: Un projet de mise à disposition de données dans le contexte des usages de l’IA.
+  input_type: single
+  required: false
+  options:
+  - value: 'yes'
+    label: Oui
+  - value: 'no'
+    label: Non
+  - value: not_applicable
+    label: Ne s’applique pas
+  show_if:
+    any:
+    - field: participation_position
+      equals: organisation
+    - field: participation_position
+      equals: both
+- step: project
+  field: project_name
+  id: project_name
+  revision: 2
+  prompt: Quel est le nom du projet que nous souhaitons documenter ?
+  input_type: text
+  required: false
+  show_if:
+    field: document_project
+    equals: 'yes'
+- step: project
+  field: project_description
+  id: project_description
+  revision: 2
+  prompt: Décrivons le projet en une phrase, en précisant son objectif.
+  input_type: text
+  required: false
+  show_if:
+    field: document_project
+    equals: 'yes'
+- step: project
+  field: project_url
+  id: project_url
+  revision: 2
+  prompt: Un lien permet-il d’en savoir plus ?
+  input_type: url
+  required: false
+  show_if:
+    field: document_project
+    equals: 'yes'
+- step: exchange_offer
+  field: knowledge_offer
+  id: knowledge_offer
+  revision: 2
+  prompt: Dans quels domaines est-ce que je peux partager une expertise, une expérimentation, un outil ou une ressource ?
+  input_type: grouped_multi
+  required: false
+  taxonomy: commons_ai_topics
+  free_text:
+    field: knowledge_offer_other
+    prompt: Autre domaine
+  companion:
+    field: knowledge_offer_example
+    prompt: Un exemple concret de ce que je pourrais partager, si je le souhaite
+- step: exchange_need
+  field: knowledge_need
+  id: knowledge_need
+  revision: 2
+  prompt: Dans quels domaines est-ce que je souhaite approfondir mes connaissances ou trouver un appui ?
+  input_type: grouped_multi
+  required: false
+  taxonomy: commons_ai_topics
+  free_text:
+    field: knowledge_need_other
+    prompt: Autre domaine
+  companion:
+    field: knowledge_need_example
+    prompt: Un exemple concret de ce que j’aimerais retirer de cet événement, si je le souhaite
+- step: friction
+  field: frictions
+  id: frictions
+  revision: 1
+  prompt: Qu’est-ce qui freine aujourd’hui ma capacité à avancer ?
+  input_type: multi_with_other
+  required: false
+  max_select: 4
+  taxonomy: friction_types
+  free_text:
+    field: frictions_other
+    prompt: Autre frein
+- step: inspiration
+  field: inspiration
+  id: inspiration
+  revision: 2
+  prompt: Qu’est-ce qui m’inspire aujourd’hui dans le domaine des communs de données et de l’IA ?
+  input_type: multi_with_other
+  required: false
+  max_select: 3
+  options:
+  - value: tool
+    label: Un outil
+  - value: infrastructure
+    label: Une infrastructure
+  - value: project
+    label: Un projet
+  - value: group
+    label: Un regroupement
+  - value: community
+    label: Une communauté
+  - value: manifesto
+    label: Un manifeste
+  - value: coalition
+    label: Une coalition
+  - value: public_policy
+    label: Une politique publique
+  - value: protocol_standard
+    label: Un protocole ou standard
+  - value: experiment
+    label: Une expérimentation
+  - value: other
+    label: Autre
+  companion:
+    field: inspiration_detail
+    prompt: Nommons ou décrivons l’initiative
+- step: future_outcome
+  field: future_outcome
+  id: future_outcome
+  revision: 2
+  prompt: À quoi pourrait ressembler, pour nous, un résultat positif ?
+  input_type: multi_with_other
+  required: false
+  max_select: 5
+  options:
+  - value: political_commitment
+    label: Un engagement politique
+  - value: new_policy
+    label: Une nouvelle règle ou politique publique
+  - value: coalition
+    label: Une coalition
+  - value: protocol_standard
+    label: Un protocole ou standard
+  - value: infrastructure_tool
+    label: Une infrastructure ou un outil
+  - value: funding
+    label: Un financement
+  - value: shared_resource
+    label: Une ressource mise en commun
+  - value: collaboration
+    label: Une nouvelle collaboration
+  - value: experiment
+    label: Une expérimentation concrète
+  - value: practice_change
+    label: Un changement de pratique dans une organisation
+  - value: clearer_disagreement
+    label: Un désaccord devenu plus clair
+  - value: new_question
+    label: Une question nouvelle devenue visible
+  - value: learning_from_failure
+    label: Un échec dont nous pouvons apprendre
+  - value: public_mobilisation
+    label: Une mobilisation publique
+  - value: unexpected_initiative
+    label: Une initiative inattendue
+  - value: other
+    label: Autre
+  free_text:
+    field: future_outcome_other
+    prompt: Autre résultat possible
+  companion:
+    field: future_outcome_detail
+    prompt: Précisons si nous le souhaitons
+- step: future_effects
+  field: future_effects
+  id: future_effects
+  revision: 2
+  prompt: Qu’est-ce que cela changerait concrètement ?
+  input_type: multi_with_other
+  required: false
+  max_select: 5
+  options:
+  - value: enable_action
+    label: Rendre possible une action aujourd’hui difficile ou impossible
+  - value: change_practice
+    label: Modifier une pratique
+  - value: change_rule
+    label: Faire évoluer une règle
+  - value: resource_access
+    label: Donner accès à une ressource
+  - value: support_project
+    label: Renforcer un projet existant
+  - value: collaboration
+    label: Faire émerger une collaboration
+  - value: capacity
+    label: Développer une capacité
+  - value: reduce_dependency
+    label: Réduire une dépendance
+  - value: new_experiment
+    label: Ouvrir une nouvelle expérimentation
+  - value: other
+    label: Autre
+  free_text:
+    field: future_effects_other
+    prompt: Autre effet concret
+  companion:
+    field: future_effects_detail
+    prompt: Un exemple concret, si nous le souhaitons
+- step: future_conditions
+  field: future_conditions
+  id: future_conditions
+  revision: 2
+  prompt: Quelles étapes permettraient à ce résultat de se concrétiser, et quels acteur·ices pourraient porter chacune d’elles
+    ?
+  input_type: repeatable_group
+  required: false
+  min_items: 0
+  fields:
+  - field: action
+    prompt: Étape ou action nécessaire
+    input_type: text_with_suggestions
+    required: false
+    suggestions:
+    - Concertation / consultation
+    - Formation ou élargissement d’une coalition
+    - Prise de contact / mise en relation
+    - Cartographie / documentation
+    - Expérimentation / pilote
+    - Prototype / infrastructure
+    - Partage ou ouverture de données
+    - Définition d’un standard ou protocole
+    - Accord / convention / contrat
+    - Évolution réglementaire
+    - Décision institutionnelle
+    - Mobilisation / plaidoyer
+    - Financement
+    - Évaluation / preuve
+    - Communication publique
+    - Autre
+  - field: actors
+    prompt: Acteur·ices susceptibles de porter cette étape
+    input_type: grouped_multi
+    required: false
+    taxonomy: actor_types
+    free_text:
+      field: actors_other
+      prompt: Autre acteur·ice
+- step: future_contribution
+  field: future_contribution
+  id: future_contribution
+  revision: 2
+  prompt: Qu’est-ce que je serais prêt·e à mettre sur la table ?
+  input_type: multi_with_other
+  required: false
+  max_select: 6
+  options:
+  - value: share_expertise
+    label: Partager une expertise
+  - value: share_data
+    label: Partager des données ou ressources
+  - value: provide_tool
+    label: Mettre à disposition un outil
+  - value: build_test
+    label: Construire ou tester un prototype
+  - value: document
+    label: Documenter une expérience
+  - value: connect_people
+    label: Mettre des personnes en relation
+  - value: join_coalition
+    label: Rejoindre une coalition
+  - value: initiate_coalition
+    label: Initier une coalition
+  - value: adapt_practice
+    label: Adapter une pratique dans mon organisation
+  - value: internal_discussion
+    label: Porter une discussion dans mon organisation
+  - value: advocacy
+    label: Plaider pour une évolution de politique
+  - value: protocol_standard
+    label: Contribuer à un standard ou protocole
+  - value: organise_experiment
+    label: Organiser une rencontre ou expérimentation
+  - value: fund_support
+    label: Financer / soutenir une action
+  - value: other
+    label: Autre
+  free_text:
+    field: future_contribution_other
+    prompt: Précisons la contribution
+- step: scenario_position
+  field: scenario_position
+  id: scenario_position
+  revision: 2
+  prompt: Depuis quelle(s) position(s) réelle(s) pourrais-je agir dans cet exercice ?
+  input_type: grouped_multi
+  required: false
+  taxonomy: actor_types
+  free_text:
+    field: scenario_position_other
+    prompt: Autre position réelle
+  companion:
+    field: scenario_position_explore
+    prompt: Y a-t-il une autre position que j’aimerais essayer ou comprendre pendant l’exercice ?
+interaction:
+  nothing_substantively_mandatory: true
+  question_resolution:
+  - answer
+  - skip
+  - flag
+  answer_before_meta_actions: true
+  subordinate_fields_inherit_parent_resolution: true
+  skip:
+    enabled: true
+    reason_prompt: Pourquoi est-ce que je passe cette question ?
+    reasons:
+    - value: not_applicable
+      label: Non applicable
+    - value: dont_know
+      label: Je ne sais pas
+    - value: prefer_not
+      label: Je préfère ne pas répondre
+    - value: cannot_answer
+      label: La question ne me permet pas de répondre correctement
+    - value: other
+      label: Autre
+    note_optional: true
+  flag:
+    enabled: true
+    prompt: Signalons positivement ou négativement ce qui fonctionne, ce qui ne fonctionne pas ou mérite attention.
+    options:
+    - value: interesting
+      label: Intéressante
+    - value: useful
+      label: Utile
+    - value: thought_provoking
+      label: Stimulante
+    - value: well_framed
+      label: Bien formulée
+    - value: incomplete
+      label: Incomplète
+    - value: misleading
+      label: Trompeuse
+    - value: too_narrow
+      label: Trop étroite
+    - value: unclear
+      label: Peu claire
+    - value: missing_option
+      label: Option manquante
+    note_optional: true
+  review_editable: true
+  mobile:
+    prefer_selection_over_typing: true
+profile_fields:
+- name
+- participation_position
+- base_location
+- sectors
+- functions
+- organisation_name
+- organisation_size
+- organisation_territory
+session_fields:
+- participation_acknowledgement
+- availability
+- dietary_preferences
+- document_project
+- project_name
+- project_description
+- project_url
+- knowledge_offer
+- knowledge_need
+- frictions
+- inspiration
+- future_outcome
+- future_effects
+- future_conditions
+- future_contribution
+- scenario_position
+deferrable_fields:
+- availability
+- dietary_preferences
+- name
+- participation_position
+- base_location
+- sectors
+- functions
+- organisation_name
+- organisation_size
+- organisation_territory
+- document_project
+- project_name
+- project_description
+- project_url
+- knowledge_offer
+- knowledge_need
+- frictions
+- inspiration
+- future_outcome
+- future_effects
+- future_conditions
+- future_contribution
+- scenario_position
+fingerprint_axes:
+- id: sectors
+  source: sectors
+  taxonomy: sectors
+- id: functions
+  source: functions
+  taxonomy: functions
+- id: offers
+  source: knowledge_offer
+  taxonomy: commons_ai_topics
+- id: needs
+  source: knowledge_need
+  taxonomy: commons_ai_topics
+- id: frictions
+  source: frictions
+  taxonomy: friction_types
+representations:
+- id: participation_overview
+  type: composite
+  scope: collective
+  title: Notre participation
+  components:
+  - type: distribution
+    source:
+      field: participation_acknowledgement
+  - type: grouped_distribution
+    source:
+      field: availability
+  - type: distribution
+    source:
+      field: dietary_preferences
+- id: participant_portrait
+  type: composite
+  scope: collective
+  title: Qui sommes-nous ?
+  components:
+  - type: grouped_distribution
+    source:
+      field: sectors
+  - type: grouped_distribution
+    source:
+      field: functions
+  - type: distribution
+    source:
+      field: participation_position
+- id: knowledge_exchange
+  type: comparison
+  scope: collective
+  title: Ce que nous pouvons partager ↔ ce que nous recherchons
+  sources:
+  - field: knowledge_offer
+    role: offer
+  - field: knowledge_need
+    role: need
+- id: future_landscape
+  type: composite
+  scope: collective
+  title: Ce que nous aimerions faire émerger
+  components:
+  - type: distribution
+    source:
+      field: future_outcome
+  - type: distribution
+    source:
+      field: future_effects
+  - type: records
+    source:
+      field: future_conditions
+  - type: distribution
+    source:
+      field: future_contribution
+  - type: distribution
+    source:
+      field: scenario_position
+editorial_review:
+- id: consent_legal_review
+  status: open
+  note: Le texte source affirme conservation sécurisée 5 ans, accès équipe de recherche, partage de certaines informations
+    professionnelles et non-utilisation des données en cas d’abandon. Ces engagements doivent être validés par l’équipe responsable/juridique.
+    Le YAML ne les transforme pas en garanties techniques.
+- id: q21_role_change
+  status: intentional_change
+  note: La Q21 fictionnelle du Markdown n’est pas reprise telle quelle. Elle devient une question sur les positions réelles
+    d’action, avec une invitation optionnelle à explorer une autre position.

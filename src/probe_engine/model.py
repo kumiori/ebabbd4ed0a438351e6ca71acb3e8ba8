@@ -15,14 +15,22 @@ class DefinitionError(ValueError):
 class InputType(StrEnum):
     SINGLE = "single"
     MULTIPLE = "multiple"
+    SINGLE_WITH_OTHER = "single_with_other"
+    GROUPED_MULTIPLE = "grouped_multi"
+    MULTIPLE_WITH_OTHER = "multi_with_other"
     TEXT = "text"
+    TEXT_WITH_SUGGESTIONS = "text_with_suggestions"
+    URL = "url"
+    LOCATION = "location"
     NUMBER = "number"
     BOOLEAN = "boolean"
     REPEATABLE = "repeatable"
+    REPEATABLE_GROUP = "repeatable_group"
 
 
 class RepresentationType(StrEnum):
     DISTRIBUTION = "distribution"
+    GROUPED_DISTRIBUTION = "grouped_distribution"
     RESPONSES = "responses"
     RECORDS = "records"
     COMPARISON = "comparison"
@@ -82,9 +90,7 @@ class Taxonomy:
         values = [option.value for option in self.options]
         if len(values) != len(set(values)):
             raise DefinitionError(f"Taxonomy `{self.id}` has duplicate option values.")
-        unknown = {
-            value for group in self.groups for value in group.option_values
-        } - set(values)
+        unknown = {value for group in self.groups for value in group.option_values} - set(values)
         if unknown:
             raise DefinitionError(
                 f"Taxonomy `{self.id}` groups reference unknown values: "
@@ -102,16 +108,25 @@ class Taxonomy:
 
 @dataclass(frozen=True)
 class Condition:
-    field_id: str
-    operator: str
-    value: Any
+    field_id: str = ""
+    operator: str = "equals"
+    value: Any = None
+    clauses: tuple[Condition, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.field_id or self.operator not in {"equals"}:
+        if self.operator == "any":
+            if not self.clauses:
+                raise DefinitionError("Any conditions require clauses.")
+        elif not self.field_id or self.operator not in {"equals", "contains"}:
             raise DefinitionError("Conditions require a field id and supported operator.")
 
     def to_dict(self) -> dict[str, Any]:
-        return {"field_id": self.field_id, "operator": self.operator, "value": self.value}
+        return {
+            "field_id": self.field_id,
+            "operator": self.operator,
+            "value": self.value,
+            "clauses": [clause.to_dict() for clause in self.clauses],
+        }
 
 
 @dataclass(frozen=True)
@@ -134,6 +149,7 @@ class OtherControl:
     label: str = ""
     placeholder: str = ""
     required: bool = False
+    visible_if: Condition | None = None
 
     def __post_init__(self) -> None:
         if self.enabled and not self.field_id:
@@ -146,6 +162,59 @@ class OtherControl:
             "label": self.label,
             "placeholder": self.placeholder,
             "required": self.required,
+            "visible_if": self.visible_if.to_dict() if self.visible_if else None,
+        }
+
+
+@dataclass(frozen=True)
+class SelectionShortcut:
+    id: str
+    label: str
+    select: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.id or not self.label or not self.select:
+            raise DefinitionError("Selection shortcuts require id, label, and selections.")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"id": self.id, "label": self.label, "select": list(self.select)}
+
+
+@dataclass(frozen=True)
+class LocationCapabilities:
+    manual_text: bool = False
+    geolocation_lookup: bool = False
+    geolocation_requires_user_action: bool = True
+
+    def to_dict(self) -> dict[str, bool]:
+        return {
+            "manual_text": self.manual_text,
+            "geolocation_lookup": self.geolocation_lookup,
+            "geolocation_requires_user_action": self.geolocation_requires_user_action,
+        }
+
+
+@dataclass(frozen=True)
+class LocationValue:
+    display_label: str
+    locality: str = ""
+    region: str = ""
+    country: str = ""
+    country_code: str = ""
+    place_id: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "display_label": self.display_label,
+            "locality": self.locality,
+            "region": self.region,
+            "country": self.country,
+            "country_code": self.country_code,
+            "place_id": self.place_id,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
         }
 
 
@@ -161,42 +230,79 @@ class ReasonTaxonomy:
             raise DefinitionError("Reason taxonomies require stable identity and unique options.")
 
     def to_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "revision": self.revision, "options": [item.to_dict() for item in self.options]}
+        return {
+            "id": self.id,
+            "revision": self.revision,
+            "options": [item.to_dict() for item in self.options],
+        }
 
 
 def _default_skip_reasons() -> ReasonTaxonomy:
-    return ReasonTaxonomy("prediction_skip_reasons", 1, (
-        Option("not_relevant", "Not relevant to me"),
-        Option("dont_know", "I don't know"),
-        Option("prefer_not_to_answer", "I prefer not to answer"),
-        Option("dont_understand", "I don't understand the question"),
-        Option("no_option_fits", "None of the options fit"),
-        Option("too_difficult_briefly", "Too difficult to answer briefly"),
-        Option("other", "Other"),
-    ))
+    return ReasonTaxonomy(
+        "prediction_skip_reasons",
+        1,
+        (
+            Option("not_relevant", "Not relevant to me"),
+            Option("dont_know", "I don't know"),
+            Option("prefer_not_to_answer", "I prefer not to answer"),
+            Option("dont_understand", "I don't understand the question"),
+            Option("no_option_fits", "None of the options fit"),
+            Option("too_difficult_briefly", "Too difficult to answer briefly"),
+            Option("other", "Other"),
+        ),
+    )
 
 
 def _default_flag_reasons() -> ReasonTaxonomy:
-    return ReasonTaxonomy("prediction_flag_reasons", 1, (
-        Option("interesting_question", "Interesting"),
-        Option("useful_for_coordination", "Useful"),
-        Option("thought_provoking", "Thought-provoking"),
-        Option("well_framed", "Well framed"),
-        Option("incomplete", "Incomplete"),
-        Option("misleading", "Misleading"),
-        Option("too_narrow", "Too narrow"),
-        Option("unclear", "Unclear"),
-        Option("missing_option", "Missing option"),
-    ))
+    return ReasonTaxonomy(
+        "prediction_flag_reasons",
+        1,
+        (
+            Option("interesting_question", "Interesting"),
+            Option("useful_for_coordination", "Useful"),
+            Option("thought_provoking", "Thought-provoking"),
+            Option("well_framed", "Well framed"),
+            Option("incomplete", "Incomplete"),
+            Option("misleading", "Misleading"),
+            Option("too_narrow", "Too narrow"),
+            Option("unclear", "Unclear"),
+            Option("missing_option", "Missing option"),
+        ),
+    )
 
 
 @dataclass(frozen=True)
 class ResolutionDefinition:
     skip_reasons: ReasonTaxonomy = field(default_factory=_default_skip_reasons)
     flag_reasons: ReasonTaxonomy = field(default_factory=_default_flag_reasons)
+    actions: tuple[str, ...] = ("answer", "skip", "flag")
+    nothing_substantively_mandatory: bool = True
+    answer_before_meta_actions: bool = True
+    subordinate_fields_inherit_parent_resolution: bool = True
+    skip_enabled: bool = True
+    skip_reason_prompt: str = ""
+    skip_note_optional: bool = True
+    flag_enabled: bool = True
+    flag_prompt: str = ""
+    flag_note_optional: bool = True
+    review_editable: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        return {"skip_reasons": self.skip_reasons.to_dict(), "flag_reasons": self.flag_reasons.to_dict()}
+        return {
+            "skip_reasons": self.skip_reasons.to_dict(),
+            "flag_reasons": self.flag_reasons.to_dict(),
+            "actions": list(self.actions),
+            "nothing_substantively_mandatory": self.nothing_substantively_mandatory,
+            "answer_before_meta_actions": self.answer_before_meta_actions,
+            "subordinate_fields_inherit_parent_resolution": self.subordinate_fields_inherit_parent_resolution,
+            "skip_enabled": self.skip_enabled,
+            "skip_reason_prompt": self.skip_reason_prompt,
+            "skip_note_optional": self.skip_note_optional,
+            "flag_enabled": self.flag_enabled,
+            "flag_prompt": self.flag_prompt,
+            "flag_note_optional": self.flag_note_optional,
+            "review_editable": self.review_editable,
+        }
 
 
 @dataclass(frozen=True)
@@ -222,6 +328,11 @@ class FieldDefinition:
     item_fields: tuple[FieldDefinition, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
     independently_answerable: bool = False
+    shortcuts: tuple[SelectionShortcut, ...] = ()
+    capabilities: LocationCapabilities | None = None
+    companions: tuple[FieldDefinition, ...] = ()
+    option_groups: tuple[OptionGroup, ...] = ()
+    free_text_field: FieldDefinition | None = None
 
     def __post_init__(self) -> None:
         if not self.id or not self.prompt or self.revision < 1:
@@ -236,6 +347,10 @@ class FieldDefinition:
             raise DefinitionError(f"Field `{self.id}` min_items cannot be negative.")
         if self.input_type == InputType.REPEATABLE and not self.item_fields:
             raise DefinitionError(f"Field `{self.id}` requires repeatable item fields.")
+        if self.input_type == InputType.REPEATABLE_GROUP and not self.item_fields:
+            raise DefinitionError(f"Field `{self.id}` requires repeatable item fields.")
+        if self.input_type == InputType.LOCATION and self.capabilities is None:
+            raise DefinitionError(f"Location field `{self.id}` requires capabilities.")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -258,6 +373,11 @@ class FieldDefinition:
             "item_fields": [item.to_dict() for item in self.item_fields],
             "metadata": dict(self.metadata),
             "independently_answerable": self.independently_answerable,
+            "shortcuts": [item.to_dict() for item in self.shortcuts],
+            "capabilities": self.capabilities.to_dict() if self.capabilities else None,
+            "companions": [item.to_dict() for item in self.companions],
+            "option_groups": [item.to_dict() for item in self.option_groups],
+            "free_text_field": self.free_text_field.to_dict() if self.free_text_field else None,
         }
 
 
@@ -304,6 +424,11 @@ class QuestionDefinition:
     lineage: RevisionLineage = field(default_factory=RevisionLineage)
     metadata: Mapping[str, Any] = field(default_factory=dict)
     independently_answerable: bool = True
+    shortcuts: tuple[SelectionShortcut, ...] = ()
+    capabilities: LocationCapabilities | None = None
+    companions: tuple[FieldDefinition, ...] = ()
+    option_groups: tuple[OptionGroup, ...] = ()
+    free_text_field: FieldDefinition | None = None
 
     def __post_init__(self) -> None:
         if not self.id or not self.prompt:
@@ -312,19 +437,26 @@ class QuestionDefinition:
             raise DefinitionError(f"Question `{self.id}` revision must be positive.")
         if self.status not in {"active", "retired"}:
             raise DefinitionError(f"Question `{self.id}` has unsupported status `{self.status}`.")
-        if self.input_type in {InputType.SINGLE, InputType.MULTIPLE} and not (
-            self.options or self.taxonomy_id
-        ):
+        if self.input_type in {
+            InputType.SINGLE,
+            InputType.MULTIPLE,
+            InputType.SINGLE_WITH_OTHER,
+            InputType.GROUPED_MULTIPLE,
+            InputType.MULTIPLE_WITH_OTHER,
+        } and not (self.options or self.taxonomy_id):
             raise DefinitionError(f"Question `{self.id}` requires at least one option.")
-        if self.input_type == InputType.REPEATABLE and not self.item_fields:
+        if (
+            self.input_type in {InputType.REPEATABLE, InputType.REPEATABLE_GROUP}
+            and not self.item_fields
+        ):
             raise DefinitionError(f"Question `{self.id}` requires repeatable item fields.")
+        if self.input_type == InputType.LOCATION and self.capabilities is None:
+            raise DefinitionError(f"Location field `{self.id}` requires capabilities.")
         if (
             self.lineage.supersedes_revision is not None
             and self.lineage.supersedes_revision >= self.revision
         ):
-            raise DefinitionError(
-                f"Question `{self.id}` must supersede an earlier revision."
-            )
+            raise DefinitionError(f"Question `{self.id}` must supersede an earlier revision.")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -353,6 +485,11 @@ class QuestionDefinition:
             "lineage": self.lineage.to_dict(),
             "metadata": dict(self.metadata),
             "independently_answerable": self.independently_answerable,
+            "shortcuts": [item.to_dict() for item in self.shortcuts],
+            "capabilities": self.capabilities.to_dict() if self.capabilities else None,
+            "companions": [item.to_dict() for item in self.companions],
+            "option_groups": [item.to_dict() for item in self.option_groups],
+            "free_text_field": self.free_text_field.to_dict() if self.free_text_field else None,
         }
 
 
@@ -436,6 +573,82 @@ class SectionDefinition:
 
 
 @dataclass(frozen=True)
+class FlowModeDefinition:
+    id: str
+    title: str
+    detail: str
+    step_ids: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "title": self.title,
+            "detail": self.detail,
+            "step_ids": list(self.step_ids),
+        }
+
+
+@dataclass(frozen=True)
+class FingerprintAxis:
+    id: str
+    source_field_id: str
+    taxonomy_id: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "source_field_id": self.source_field_id,
+            "taxonomy_id": self.taxonomy_id,
+        }
+
+
+@dataclass(frozen=True)
+class EditorialReviewItem:
+    id: str
+    status: str
+    note: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"id": self.id, "status": self.status, "note": self.note}
+
+
+@dataclass(frozen=True)
+class AuthoringDefinition:
+    language: str = ""
+    default_mode: str = ""
+    show_mode_selection: bool = False
+    show_welcome_step: bool = False
+    identity_position: str = ""
+    review: Mapping[str, Any] = field(default_factory=dict)
+    step_order: tuple[str, ...] = ()
+    flow_modes: tuple[FlowModeDefinition, ...] = ()
+    profile_fields: tuple[str, ...] = ()
+    session_fields: tuple[str, ...] = ()
+    deferrable_fields: tuple[str, ...] = ()
+    fingerprint_axes: tuple[FingerprintAxis, ...] = ()
+    editorial_review: tuple[EditorialReviewItem, ...] = ()
+    presentation_hints: Mapping[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "language": self.language,
+            "default_mode": self.default_mode,
+            "show_mode_selection": self.show_mode_selection,
+            "show_welcome_step": self.show_welcome_step,
+            "identity_position": self.identity_position,
+            "review": dict(self.review),
+            "step_order": list(self.step_order),
+            "flow_modes": [item.to_dict() for item in self.flow_modes],
+            "profile_fields": list(self.profile_fields),
+            "session_fields": list(self.session_fields),
+            "deferrable_fields": list(self.deferrable_fields),
+            "fingerprint_axes": [item.to_dict() for item in self.fingerprint_axes],
+            "editorial_review": [item.to_dict() for item in self.editorial_review],
+            "presentation_hints": dict(self.presentation_hints),
+        }
+
+
+@dataclass(frozen=True)
 class RepresentationSource:
     field_id: str = ""
     trajectory: str = ""
@@ -456,6 +669,20 @@ class RepresentationSource:
 
 
 @dataclass(frozen=True)
+class RepresentationComponent:
+    type: RepresentationType
+    source: RepresentationSource
+    projection: Mapping[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "type": self.type.value,
+            "source": self.source.to_dict(),
+            "projection": dict(self.projection),
+        }
+
+
+@dataclass(frozen=True)
 class RepresentationDefinition:
     id: str
     revision: int
@@ -463,7 +690,8 @@ class RepresentationDefinition:
     scope: RepresentationScope
     sources: tuple[RepresentationSource, ...] = ()
     projection: Mapping[str, Any] = field(default_factory=dict)
-    components: tuple[str, ...] = ()
+    components: tuple[str | RepresentationComponent, ...] = ()
+    title: str = ""
 
     def __post_init__(self) -> None:
         if not self.id or self.revision < 1:
@@ -481,7 +709,11 @@ class RepresentationDefinition:
             "scope": self.scope.value,
             "sources": [source.to_dict() for source in self.sources],
             "projection": dict(self.projection),
-            "components": list(self.components),
+            "components": [
+                {"representation": item} if isinstance(item, str) else item.to_dict()
+                for item in self.components
+            ],
+            "title": self.title,
         }
 
 
@@ -517,7 +749,11 @@ class ResultsDefinition:
     blocks: tuple[ResultBlockDefinition, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        return {"title": self.title, "intro": self.intro, "blocks": [b.to_dict() for b in self.blocks]}
+        return {
+            "title": self.title,
+            "intro": self.intro,
+            "blocks": [b.to_dict() for b in self.blocks],
+        }
 
 
 Block = NarrativeBlock | QuestionBlock | SectionBlock
@@ -538,6 +774,7 @@ class ProbeDefinition:
     representations: tuple[RepresentationDefinition, ...] = ()
     results: ResultsDefinition | None = None
     resolution: ResolutionDefinition = field(default_factory=ResolutionDefinition)
+    authoring: AuthoringDefinition = field(default_factory=AuthoringDefinition)
 
     def __post_init__(self) -> None:
         if not self.id or not self.title or self.revision < 1:
@@ -567,20 +804,47 @@ class ProbeDefinition:
         known_taxonomies = set(taxonomy_ids)
         for question in self.questions:
             self._validate_field_taxonomies(question, known_taxonomies)
-            if question.visible_if and question.visible_if.field_id not in known:
+            condition_fields = self._condition_fields(question.visible_if)
+            if condition_fields - known:
                 raise DefinitionError(
                     f"Field `{question.id}` condition references unknown field "
-                    f"`{question.visible_if.field_id}`."
+                    f"`{', '.join(sorted(condition_fields - known))}`."
                 )
             for route in question.routes:
-                if route.when.field_id not in known:
+                route_fields = self._condition_fields(route.when)
+                if route_fields - known:
                     raise DefinitionError(
                         f"Field `{question.id}` route references unknown field "
-                        f"`{route.when.field_id}`."
+                        f"`{', '.join(sorted(route_fields - known))}`."
                     )
-        nested_ids = [field.id for question in self.questions for field in self._nested_fields(question)]
+        nested_ids = [
+            field.id for question in self.questions for field in self._nested_fields(question)
+        ]
         if len(nested_ids) != len(set(nested_ids)) or set(nested_ids) & known:
-            raise DefinitionError("Nested field IDs must be globally unique and distinct from questions.")
+            raise DefinitionError(
+                "Nested field IDs must be globally unique and distinct from questions."
+            )
+        all_known = known | set(nested_ids)
+        for question in self.questions:
+            for nested_field in (question, *self._nested_fields(question)):
+                condition_fields = self._condition_fields(nested_field.visible_if)
+                if condition_fields - all_known:
+                    raise DefinitionError(
+                        f"Field `{nested_field.id}` condition references unknown fields: "
+                        f"{', '.join(sorted(condition_fields - all_known))}."
+                    )
+                allowed_options = {option.value for option in nested_field.options}
+                if nested_field.taxonomy_id:
+                    allowed_options = {
+                        option.value for option in self.taxonomy(nested_field.taxonomy_id).options
+                    }
+                for shortcut in nested_field.shortcuts:
+                    unknown_selections = set(shortcut.select) - allowed_options
+                    if unknown_selections:
+                        raise DefinitionError(
+                            f"Shortcut `{shortcut.id}` selects unknown values: "
+                            f"{', '.join(sorted(unknown_selections))}."
+                        )
         step_ids = [step.id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):
             raise DefinitionError("A Probe cannot contain duplicate step IDs.")
@@ -597,6 +861,42 @@ class ProbeDefinition:
                 raise DefinitionError(
                     f"Section `{section.id}` references unknown steps: {', '.join(sorted(missing_steps))}."
                 )
+        if self.authoring.step_order:
+            if self.authoring.step_order != tuple(step.id for step in self.steps):
+                raise DefinitionError("Authoring step order must match canonical steps exactly.")
+            for mode in self.authoring.flow_modes:
+                missing_mode_steps = set(mode.step_ids) - known_steps
+                if missing_mode_steps:
+                    raise DefinitionError(
+                        f"Flow mode `{mode.id}` references unknown steps: "
+                        f"{', '.join(sorted(missing_mode_steps))}."
+                    )
+            classified = set(self.authoring.profile_fields) | set(self.authoring.session_fields)
+            if classified - known:
+                raise DefinitionError(
+                    f"Authoring field classifications reference unknown fields: "
+                    f"{', '.join(sorted(classified - known))}."
+                )
+            overlap = set(self.authoring.profile_fields) & set(self.authoring.session_fields)
+            if overlap:
+                raise DefinitionError(
+                    f"Fields cannot be both profile and session fields: {', '.join(sorted(overlap))}."
+                )
+            unknown_deferrable = set(self.authoring.deferrable_fields) - known
+            if unknown_deferrable:
+                raise DefinitionError(
+                    f"Deferrable fields are unknown: {', '.join(sorted(unknown_deferrable))}."
+                )
+            for axis in self.authoring.fingerprint_axes:
+                if axis.source_field_id not in known:
+                    raise DefinitionError(f"Fingerprint axis `{axis.id}` references unknown field.")
+                if axis.taxonomy_id and axis.taxonomy_id not in known_taxonomies:
+                    raise DefinitionError(
+                        f"Fingerprint axis `{axis.id}` references unknown taxonomy."
+                    )
+        allowed_actions = {"answer", "skip", "flag", "defer"}
+        if not self.resolution.actions or set(self.resolution.actions) - allowed_actions:
+            raise DefinitionError("Resolution actions contain unsupported semantics.")
         self._validate_representations()
 
     def _validate_representations(self) -> None:
@@ -606,7 +906,12 @@ class ProbeDefinition:
         known_fields = {question.id: question for question in self.questions}
         known_representations = set(ids)
         for representation in self.representations:
-            for source in representation.sources:
+            component_sources = tuple(
+                component.source
+                for component in representation.components
+                if isinstance(component, RepresentationComponent)
+            )
+            for source in (*representation.sources, *component_sources):
                 if source.field_id and source.field_id not in known_fields:
                     raise DefinitionError(
                         f"Representation `{representation.id}` references unknown field `{source.field_id}`."
@@ -627,9 +932,24 @@ class ProbeDefinition:
                 raise DefinitionError(
                     f"Representation `{representation.id}` references unknown taxonomy `{taxonomy_id}`."
                 )
-            source_fields = [known_fields[source.field_id] for source in representation.sources if source.field_id]
-            if representation.type == RepresentationType.DISTRIBUTION and any(
-                source.input_type not in {InputType.SINGLE, InputType.MULTIPLE} for source in source_fields
+            source_fields = [
+                known_fields[source.field_id]
+                for source in representation.sources
+                if source.field_id
+            ]
+            if representation.type in {
+                RepresentationType.DISTRIBUTION,
+                RepresentationType.GROUPED_DISTRIBUTION,
+            } and any(
+                source.input_type
+                not in {
+                    InputType.SINGLE,
+                    InputType.MULTIPLE,
+                    InputType.SINGLE_WITH_OTHER,
+                    InputType.GROUPED_MULTIPLE,
+                    InputType.MULTIPLE_WITH_OTHER,
+                }
+                for source in source_fields
             ):
                 raise DefinitionError(f"Distribution `{representation.id}` requires choice fields.")
             if representation.type == RepresentationType.RESPONSES and any(
@@ -637,27 +957,41 @@ class ProbeDefinition:
             ):
                 raise DefinitionError(f"Responses `{representation.id}` requires text fields.")
             if representation.type == RepresentationType.RECORDS and any(
-                source.input_type != InputType.REPEATABLE for source in source_fields
+                source.input_type not in {InputType.REPEATABLE, InputType.REPEATABLE_GROUP}
+                for source in source_fields
             ):
                 raise DefinitionError(f"Records `{representation.id}` requires repeatable fields.")
             if representation.type == RepresentationType.COMPARISON:
                 roles = [source.role for source in representation.sources]
-                if len(roles) < 2 or any(not role for role in roles) or len(roles) != len(set(roles)):
-                    raise DefinitionError(f"Comparison `{representation.id}` requires distinct source roles.")
+                if (
+                    len(roles) < 2
+                    or any(not role for role in roles)
+                    or len(roles) != len(set(roles))
+                ):
+                    raise DefinitionError(
+                        f"Comparison `{representation.id}` requires distinct source roles."
+                    )
                 taxonomies = {source.taxonomy_id for source in source_fields}
                 if len(taxonomies) != 1:
-                    raise DefinitionError(f"Comparison `{representation.id}` requires compatible sources.")
+                    raise DefinitionError(
+                        f"Comparison `{representation.id}` requires compatible sources."
+                    )
             for component in representation.components:
-                if component not in known_representations:
+                if isinstance(component, str) and component not in known_representations:
                     raise DefinitionError(
                         f"Representation `{representation.id}` references unknown representation `{component}`."
                     )
-        graph = {item.id: item.components for item in self.representations}
+        graph = {
+            item.id: tuple(component for component in item.components if isinstance(component, str))
+            for item in self.representations
+        }
+
         def visit(node: str, stack: set[str]) -> None:
             if node in stack:
                 raise DefinitionError("Circular composite representation reference.")
             for child in graph.get(node, ()):
                 visit(child, {*stack, node})
+
         for node in graph:
             visit(node, set())
         if self.results:
@@ -668,20 +1002,46 @@ class ProbeDefinition:
                     )
 
     @staticmethod
+    def _condition_fields(condition: Condition | None) -> set[str]:
+        if condition is None:
+            return set()
+        if condition.operator == "any":
+            return set().union(
+                *(ProbeDefinition._condition_fields(item) for item in condition.clauses)
+            )
+        return {condition.field_id}
+
+    @staticmethod
     def _validate_field_taxonomies(field: Any, known: set[str]) -> None:
         taxonomy_id = str(getattr(field, "taxonomy_id", "") or "")
         if taxonomy_id and taxonomy_id not in known:
             raise DefinitionError(
                 f"Field `{field.id}` references unknown taxonomy `{taxonomy_id}`."
             )
-        for nested in getattr(field, "item_fields", ()):
+        for nested in (
+            *getattr(field, "item_fields", ()),
+            *getattr(field, "companions", ()),
+            *(
+                (getattr(field, "free_text_field", None),)
+                if getattr(field, "free_text_field", None)
+                else ()
+            ),
+        ):
             ProbeDefinition._validate_field_taxonomies(nested, known)
 
     @staticmethod
     def _nested_fields(field: Any) -> tuple[FieldDefinition, ...]:
         return tuple(
             nested
-            for child in getattr(field, "item_fields", ())
+            for child in (
+                *getattr(field, "item_fields", ()),
+                *getattr(field, "companions", ()),
+                *(
+                    (getattr(field, "free_text_field", None),)
+                    if getattr(field, "free_text_field", None)
+                    else ()
+                ),
+            )
             for nested in (child, *ProbeDefinition._nested_fields(child))
         )
 
@@ -718,16 +1078,26 @@ class ProbeDefinition:
         for question in self.active_questions:
             if question.id == field_id:
                 return field_id
+
             def walk(field: FieldDefinition, inherited: str) -> str | None:
                 current = field.id if field.independently_answerable else inherited
                 if field.id == field_id:
                     return current
-                for child in field.item_fields:
+                for child in (
+                    *field.item_fields,
+                    *field.companions,
+                    *((field.free_text_field,) if field.free_text_field else ()),
+                ):
                     found = walk(child, current)
                     if found:
                         return found
                 return None
-            for nested in question.item_fields:
+
+            for nested in (
+                *question.item_fields,
+                *question.companions,
+                *((question.free_text_field,) if question.free_text_field else ()),
+            ):
                 found = walk(nested, question.id)
                 if found:
                     return found
@@ -736,11 +1106,13 @@ class ProbeDefinition:
     @property
     def answerable_order(self) -> tuple[str, ...]:
         ordered: list[str] = []
+
         def append_nested(field: FieldDefinition) -> None:
             if field.independently_answerable:
                 ordered.append(field.id)
             for child in field.item_fields:
                 append_nested(child)
+
         for question_id in self.question_order:
             question = self.question(question_id)
             ordered.append(question_id)
@@ -787,5 +1159,6 @@ class ProbeDefinition:
             "representations": [item.to_dict() for item in self.representations],
             "results": self.results.to_dict() if self.results else None,
             "resolution": self.resolution.to_dict(),
+            "authoring": self.authoring.to_dict(),
             "metadata": dict(self.metadata),
         }

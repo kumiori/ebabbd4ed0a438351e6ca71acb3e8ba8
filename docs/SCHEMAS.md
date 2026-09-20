@@ -1,6 +1,6 @@
 # Portable schemas
 
-Probe Engine 0.3.0.dev1 writes three explicit schemas:
+Probe Engine 0.3.0.dev2 writes three explicit schemas:
 
 - `probe-definition/v1`: Probe identity/revision, ordered semantic blocks,
   exact question definitions/revisions, status, lineage, and metadata.
@@ -57,7 +57,7 @@ encoding charts, grids, widths, or any renderer technology.
 ## Resolution
 
 Top-level fields are independently answerable by definition. They are resolved
-by Answer, Skip, or Flag; `validate_resolution()` is the renderer-neutral CTA
+by Answer or Skip; `validate_resolution()` is the renderer-neutral CTA
 gate. `required` applies only inside the Answer route. Nested fields inherit the
 nearest answerable ancestor's state unless authored with
 `independently_answerable: true`.
@@ -68,6 +68,9 @@ store normalized `reason_codes` and an optional `reason_note`; the historical
 `reason` string remains readable for trajectory compatibility. Flag remains
 orthogonal, so answered+flagged and skipped+flagged are both representable.
 
+Flag is orthogonal: a flag-only question remains unresolved/unanswered, while
+answered+flagged and skipped+flagged remain representable.
+
 Representation denominators expose `resolved` separately from `answered`,
 `skipped`, `flagged`, `deferred`, and `unanswered`. Flag-only contributes to
-`resolved` and `flagged`, never to `answered` or `unanswered`.
+`flagged` and `unanswered`, never to `resolved` or `answered`.

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from .model import InputType, ProbeDefinition, QuestionDefinition, RevisionLineage
+from .model import InputType, LocationValue, ProbeDefinition, QuestionDefinition, RevisionLineage
 
 
 class RuntimeError(ValueError):
@@ -133,6 +133,8 @@ class Reconciliation:
             ReconciliationState.REANSWER_REQUIRED,
             ReconciliationState.RESKIP_OR_ANSWER_REQUIRED,
             ReconciliationState.NEWLY_ADDED,
+            ReconciliationState.FLAGGED_CURRENT,
+            ReconciliationState.FLAGGED_PREVIOUS_VALID,
         }
         return tuple(item.question_id for item in self.questions if item.state in pending)
 
@@ -149,7 +151,6 @@ class ResolutionState(StrEnum):
     UNRESOLVED = "unresolved"
     ANSWERED = "answered"
     SKIPPED = "skipped"
-    FLAGGED = "flagged"
     DEFERRED = "deferred"
     INELIGIBLE = "ineligible"
 
@@ -199,15 +200,23 @@ def _is_eligible(probe: ProbeDefinition, trajectory: Trajectory, field_id: str) 
     condition = getattr(field, "visible_if", None)
     if condition is None:
         return True
-    source = _latest_disposition(trajectory.events, condition.field_id)
-    if source is None or source.kind != EventKind.ANSWERED:
-        return False
-    value = source.value
-    if isinstance(value, Mapping) and "selected" in value:
-        value = value.get("selected")
-    if isinstance(value, (list, tuple, set)):
-        return condition.value in value
-    return value == condition.value
+
+    def evaluate(item: Any) -> bool:
+        if item.operator == "any":
+            return any(evaluate(clause) for clause in item.clauses)
+        source = _latest_disposition(trajectory.events, item.field_id)
+        if source is None or source.kind != EventKind.ANSWERED:
+            return False
+        value = source.value
+        if isinstance(value, Mapping) and "selected" in value:
+            value = value.get("selected")
+        if item.operator == "contains":
+            return isinstance(value, (list, tuple, set)) and item.value in value
+        if isinstance(value, (list, tuple, set)):
+            return item.value in value
+        return value == item.value
+
+    return evaluate(condition)
 
 
 def reconcile(probe: ProbeDefinition, trajectory: Trajectory) -> Reconciliation:
@@ -217,8 +226,21 @@ def reconcile(probe: ProbeDefinition, trajectory: Trajectory) -> Reconciliation:
     for question_id in probe.answerable_order:
         question = probe.field(question_id)
         prior = _latest_disposition(trajectory.events, question_id)
-        latest_flag = next((event for event in reversed(trajectory.events) if event.question_id == question_id and event.kind == EventKind.FLAGGED), None)
-        previous_revision = prior.question_revision if prior else latest_flag.question_revision if latest_flag else None
+        latest_flag = next(
+            (
+                event
+                for event in reversed(trajectory.events)
+                if event.question_id == question_id and event.kind == EventKind.FLAGGED
+            ),
+            None,
+        )
+        previous_revision = (
+            prior.question_revision
+            if prior
+            else latest_flag.question_revision
+            if latest_flag
+            else None
+        )
         lineage = getattr(question, "lineage", RevisionLineage())
         if (
             prior
@@ -230,11 +252,7 @@ def reconcile(probe: ProbeDefinition, trajectory: Trajectory) -> Reconciliation:
                 f"Question `{question_id}` revision {question.revision} does not "
                 f"supersede encountered revision {previous_revision}."
             )
-        reask = bool(
-            prior
-            and previous_revision != question.revision
-            and lineage.reask_if_answered
-        )
+        reask = bool(prior and previous_revision != question.revision and lineage.reask_if_answered)
         if not _is_eligible(probe, trajectory, question_id):
             state = ReconciliationState.INELIGIBLE
         elif prior is None and latest_flag is not None:
@@ -349,6 +367,8 @@ class ProbeRuntime:
 
     def answer(self, question_id: str, value: Any, *, comment: str = "") -> None:
         question = self._question(question_id)
+        if isinstance(value, LocationValue):
+            value = value.to_dict()
         _validate_answer(question, value, probe=self.probe)
         self._trajectory = self._trajectory.append(
             _event(
@@ -360,24 +380,43 @@ class ProbeRuntime:
             )
         )
 
-    def _reason_values(self, kind: str, reason_codes: Iterable[str], note: str, legacy: str) -> tuple[tuple[str, ...], str]:
-        taxonomy = self.probe.resolution.skip_reasons if kind == "skip" else self.probe.resolution.flag_reasons
+    def _reason_values(
+        self, kind: str, reason_codes: Iterable[str], note: str, legacy: str
+    ) -> tuple[tuple[str, ...], str]:
+        taxonomy = (
+            self.probe.resolution.skip_reasons
+            if kind == "skip"
+            else self.probe.resolution.flag_reasons
+        )
         allowed = {item.value for item in taxonomy.options}
-        codes = tuple(dict.fromkeys(str(value).strip() for value in reason_codes if str(value).strip()))
+        codes = tuple(
+            dict.fromkeys(str(value).strip() for value in reason_codes if str(value).strip())
+        )
         unknown = set(codes) - allowed
         if unknown:
             raise RuntimeError(f"Unknown {kind} reason: {', '.join(sorted(unknown))}.")
         reason_note = str(note or legacy or "").strip()
         if len(reason_note) > 500:
             raise RuntimeError(f"{kind.title()} reason note exceeds 500 characters.")
+        note_optional = (
+            self.probe.resolution.skip_note_optional
+            if kind == "skip"
+            else self.probe.resolution.flag_note_optional
+        )
+        if not note_optional and not reason_note:
+            raise RuntimeError(f"{kind.title()} requires a reason note.")
         return codes, reason_note
 
     def skip(
-        self, question_id: str, *, reason: str = "",
-        reason_codes: Iterable[str] = (), note: str = "",
+        self,
+        question_id: str,
+        *,
+        reason: str = "",
+        reason_codes: Iterable[str] = (),
+        note: str = "",
     ) -> None:
         question = self._question(question_id)
-        if not getattr(question, "skippable", True):
+        if not self.probe.resolution.skip_enabled or not getattr(question, "skippable", True):
             raise RuntimeError(f"Question `{question_id}` cannot be skipped.")
         codes, reason_note = self._reason_values("skip", reason_codes, note, reason)
         self._trajectory = self._trajectory.append(
@@ -392,12 +431,16 @@ class ProbeRuntime:
         )
 
     def flag(
-        self, question_id: str, *, reason: str = "",
-        reason_codes: Iterable[str] = (), note: str = "",
+        self,
+        question_id: str,
+        *,
+        reason: str = "",
+        reason_codes: Iterable[str] = (),
+        note: str = "",
         metadata: Mapping[str, Any] | None = None,
     ) -> None:
         question = self._question(question_id)
-        if not getattr(question, "flaggable", True):
+        if not self.probe.resolution.flag_enabled or not getattr(question, "flaggable", True):
             raise RuntimeError(f"Question `{question_id}` cannot be flagged.")
         codes, reason_note = self._reason_values("flag", reason_codes, note, reason)
         self._trajectory = self._trajectory.append(
@@ -414,6 +457,11 @@ class ProbeRuntime:
 
     def defer(self, question_id: str, *, reason: str = "") -> None:
         question = self._question(question_id)
+        if (
+            self.probe.authoring.deferrable_fields
+            and question_id not in self.probe.authoring.deferrable_fields
+        ):
+            raise RuntimeError(f"Question `{question_id}` cannot be deferred.")
         self._trajectory = self._trajectory.append(
             _event(
                 EventKind.DEFERRED,
@@ -431,7 +479,14 @@ class ProbeRuntime:
         if not _is_eligible(self.probe, self._trajectory, field_id):
             return Resolution(field_id, ResolutionState.INELIGIBLE)
         disposition = _latest_disposition(self._trajectory.events, field_id)
-        flag = next((event for event in reversed(self._trajectory.events) if event.question_id == field_id and event.kind == EventKind.FLAGGED), None)
+        flag = next(
+            (
+                event
+                for event in reversed(self._trajectory.events)
+                if event.question_id == field_id and event.kind == EventKind.FLAGGED
+            ),
+            None,
+        )
         if disposition is not None:
             state = {
                 EventKind.ANSWERED: ResolutionState.ANSWERED,
@@ -440,13 +495,15 @@ class ProbeRuntime:
             }[disposition.kind]
             return Resolution(field_id, state, flag is not None, event=disposition)
         if flag is not None:
-            return Resolution(field_id, ResolutionState.FLAGGED, True, event=flag)
+            return Resolution(field_id, ResolutionState.UNRESOLVED, True, event=flag)
         return Resolution(field_id, ResolutionState.UNRESOLVED)
 
     def validate_resolution(self, field_id: str) -> Resolution:
         resolution = self.resolution(field_id)
         if resolution.state == ResolutionState.UNRESOLVED:
-            raise RuntimeError(f"Question `{field_id}` is unresolved; Answer, Skip, or Flag before continuing.")
+            raise RuntimeError(
+                f"Question `{field_id}` is unresolved; Answer or Skip before continuing."
+            )
         return resolution
 
     def reconciliation(self) -> Reconciliation:
@@ -523,41 +580,76 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
     if value is None or value == "" or value == []:
         raise RuntimeError(f"Question `{question.id}` requires a non-empty answer.")
     selected_value = value
-    if question.other.enabled and isinstance(value, Mapping):
-        unknown = set(value) - {"selected", "other"}
+    if (question.other.enabled or question.companions) and isinstance(value, Mapping):
+        unknown = set(value) - {"selected", "other", "companions"}
         if unknown:
             raise RuntimeError(f"Question `{question.id}` has unknown composed answer fields.")
         selected_value = value.get("selected")
         other = value.get("other")
-        if "other" in (selected_value or ()):
-            other_text = other.get("value") if isinstance(other, Mapping) else None
-            if not isinstance(other_text, str) or not other_text.strip():
-                raise RuntimeError(f"Question `{question.id}` requires other text.")
+        if question.other.enabled:
+            if "other" in (selected_value or ()):
+                other_text = other.get("value") if isinstance(other, Mapping) else None
+                if question.other.required and (
+                    not isinstance(other_text, str) or not other_text.strip()
+                ):
+                    raise RuntimeError(f"Question `{question.id}` requires other text.")
+                if other_text is not None and not isinstance(other_text, str):
+                    raise RuntimeError(f"Question `{question.id}` other value requires text.")
+            elif other not in (None, {}, ""):
+                raise RuntimeError(
+                    f"Question `{question.id}` has other text without selecting other."
+                )
         elif other not in (None, {}, ""):
-            raise RuntimeError(f"Question `{question.id}` has other text without selecting other.")
+            raise RuntimeError(f"Question `{question.id}` has no Other control.")
+        companions = value.get("companions") or {}
+        if not isinstance(companions, Mapping):
+            raise RuntimeError(f"Question `{question.id}` companions must be a mapping.")
+        known_companions = {field.id: field for field in question.companions}
+        if set(companions) - set(known_companions):
+            raise RuntimeError(f"Question `{question.id}` has unknown companion answers.")
+        for companion_id, companion_value in companions.items():
+            if isinstance(companion_value, Mapping) and set(companion_value) == {"value"}:
+                companion_value = companion_value["value"]
+            _validate_answer(known_companions[companion_id], companion_value, probe=probe)
     allowed = {option.value for option in question.options}
     if question.taxonomy_id:
         allowed = {option.value for option in probe.taxonomy(question.taxonomy_id).options}
     if question.other.enabled:
         allowed.add("other")
-    if question.input_type == InputType.SINGLE and selected_value not in allowed:
+    single_types = {InputType.SINGLE, InputType.SINGLE_WITH_OTHER}
+    multiple_types = {
+        InputType.MULTIPLE,
+        InputType.GROUPED_MULTIPLE,
+        InputType.MULTIPLE_WITH_OTHER,
+    }
+    if question.input_type in single_types and selected_value not in allowed:
         raise RuntimeError(f"Invalid option for question `{question.id}`.")
-    if question.input_type == InputType.MULTIPLE:
-        if isinstance(selected_value, (str, bytes)) or not isinstance(selected_value, (list, tuple, set)):
+    if question.input_type in multiple_types:
+        if isinstance(selected_value, (str, bytes)) or not isinstance(
+            selected_value, (list, tuple, set)
+        ):
             raise RuntimeError(f"Question `{question.id}` requires a collection of options.")
         if not set(selected_value) <= allowed:
             raise RuntimeError(f"Invalid option for question `{question.id}`.")
-    if question.input_type == InputType.MULTIPLE:
+    if question.input_type in multiple_types:
         count = len(selected_value)
         if question.min_select is not None and count < question.min_select:
-            raise RuntimeError(f"Question `{question.id}` requires at least {question.min_select} selections.")
+            raise RuntimeError(
+                f"Question `{question.id}` requires at least {question.min_select} selections."
+            )
         if question.max_select is not None and count > question.max_select:
-            raise RuntimeError(f"Question `{question.id}` allows at most {question.max_select} selections.")
-    if question.input_type == InputType.REPEATABLE:
-        if not isinstance(value, (list, tuple)) or any(not isinstance(item, Mapping) for item in value):
+            raise RuntimeError(
+                f"Question `{question.id}` allows at most {question.max_select} selections."
+            )
+    if question.input_type in {InputType.REPEATABLE, InputType.REPEATABLE_GROUP}:
+        if not isinstance(value, (list, tuple)) or any(
+            not isinstance(item, Mapping) for item in value
+        ):
             raise RuntimeError(f"Question `{question.id}` requires a list of group items.")
         if question.min_items is not None and len(value) < question.min_items:
-            raise RuntimeError(f"Question `{question.id}` requires at least {question.min_items} items.")
+            raise RuntimeError(
+                f"Question `{question.id}` requires at least {question.min_items} items."
+            )
         known_fields = {item.id for item in question.item_fields} | {"id"}
         seen_item_ids: set[str] = set()
         for index, item in enumerate(value):
@@ -574,7 +666,9 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
                     f"{', '.join(sorted(unknown))}."
                 )
             missing = {
-                field.id for field in question.item_fields if field.required and not item.get(field.id)
+                field.id
+                for field in question.item_fields
+                if field.required and not item.get(field.id)
             }
             if missing:
                 raise RuntimeError(
@@ -588,3 +682,41 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
         raise RuntimeError(f"Question `{question.id}` requires a number.")
     if question.input_type == InputType.BOOLEAN and not isinstance(value, bool):
         raise RuntimeError(f"Question `{question.id}` requires a boolean.")
+    if question.input_type in {InputType.TEXT, InputType.TEXT_WITH_SUGGESTIONS} and not isinstance(
+        value, str
+    ):
+        raise RuntimeError(f"Question `{question.id}` requires text.")
+    if question.input_type == InputType.URL:
+        from urllib.parse import urlparse
+
+        if (
+            not isinstance(value, str)
+            or urlparse(value).scheme not in {"http", "https"}
+            or not urlparse(value).netloc
+        ):
+            raise RuntimeError(f"Question `{question.id}` requires an HTTP(S) URL.")
+    if question.input_type == InputType.LOCATION:
+        if not isinstance(value, Mapping):
+            raise RuntimeError(f"Question `{question.id}` requires a structured location.")
+        allowed_location = {
+            "display_label",
+            "locality",
+            "region",
+            "country",
+            "country_code",
+            "place_id",
+            "latitude",
+            "longitude",
+        }
+        if set(value) - allowed_location or not str(value.get("display_label") or "").strip():
+            raise RuntimeError(f"Question `{question.id}` has an invalid structured location.")
+        latitude, longitude = value.get("latitude"), value.get("longitude")
+        if (latitude is None) != (longitude is None):
+            raise RuntimeError(f"Question `{question.id}` location coordinates must be paired.")
+        if latitude is not None and (
+            not isinstance(latitude, (int, float))
+            or not isinstance(longitude, (int, float))
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+        ):
+            raise RuntimeError(f"Question `{question.id}` has invalid coordinates.")

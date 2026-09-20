@@ -53,10 +53,10 @@ runtime.validate_resolution("future_outcome")
 `answer()` is the public validation boundary. It validates choice membership,
 selection constraints, repeatable item shape, stable item identity, and nested
 fields before appending an answer event. `validate_resolution()` is the CTA
-boundary: it accepts Answer, Skip, or Flag, so a substantive answer is not
-mandatory. Skip and Flag remain distinct events with distinct controlled reason
-taxonomies; neither is encoded as an answer value. Flag is orthogonal and can
-coexist with Answer or Skip. Nested controls inherit parent resolution unless
+boundary: it accepts Answer or Skip, so a substantive answer is not mandatory.
+Skip and Flag remain distinct events with distinct controlled reason taxonomies;
+neither is encoded as an answer value. Flag is orthogonal, can coexist with
+Answer or Skip, and never resolves a question by itself. Nested controls inherit parent resolution unless
 explicitly declared `independently_answerable`.
 
 ## Canonical serialization

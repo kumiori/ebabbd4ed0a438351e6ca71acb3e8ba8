@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0.dev2 - 2026-09-20
+
+- Compile the exact Montréal v2 questionnaire authoring contract through
+  `load_yaml_probe()` without requiring consumer-side normalization.
+- Add explicit authoring models for questionnaire metadata, ordered step copy,
+  flow modes, profile/session classification, deferral, fingerprint axes, and
+  editorial review.
+- Add canonical URL and location primitives, grouped/Other field types,
+  shortcuts, companions, conditional expressions, and repeatable groups.
+- Preserve inline authored representation components and grouped distributions.
+- Correct resolution semantics so Flag remains orthogonal and does not by itself
+  resolve an unanswered question.
+- Add the exact 1,142-line Montréal source as a conformance fixture and exercise
+  parsing, canonical round trips, structured answers, hydration, editing, and persistence.
+
 ## 0.3.0.dev1 - 2026-09-20
 
 Integration build for application consumption and consolidation toward 0.3.0.
@@ -11,8 +26,8 @@ This build is intentionally untagged.
   optional notes, and structured reason codes on canonical trajectory events.
 - Let subordinate fields inherit parent resolution unless explicitly declared
   `independently_answerable`.
-- Count flag-only interactions as resolved rather than unanswered in neutral
-  representations while retaining Flag as an orthogonal state.
+- Record flag-only interactions separately from Answer and Skip. This dev1
+  behavior was corrected in dev2 so Flag remains unresolved until Answer or Skip.
 - Add canonical representation definitions for distributions, responses, records,
   comparisons, timelines, and composites with participant/collective/cohort scope.
 - Add neutral, serialisable representation results with explicit denominators and

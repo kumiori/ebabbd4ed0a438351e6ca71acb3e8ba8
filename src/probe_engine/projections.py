@@ -10,7 +10,12 @@ import hashlib
 import json
 from typing import Any
 
-from .model import Interpretation, ProbeDefinition, RepresentationDefinition, RepresentationType
+from .model import (
+    Interpretation,
+    ProbeDefinition,
+    RepresentationDefinition,
+    RepresentationType,
+)
 from .runtime import EventKind, Trajectory, _is_eligible, _latest_disposition, reconcile
 
 
@@ -63,7 +68,11 @@ def project_response_field(
                     participant_id=participant_id,
                     question_id=question_id,
                     question_revision=disposition.question_revision if disposition else None,
-                    state=disposition.kind.value if disposition else "flagged" if flagged else "unanswered",
+                    state=disposition.kind.value
+                    if disposition
+                    else "flagged"
+                    if flagged
+                    else "unanswered",
                     value=disposition.value if disposition else None,
                     flagged=flagged,
                 )
@@ -160,7 +169,9 @@ class ResultsProjection:
     blocks: tuple[ResultsBlock, ...]
 
 
-def _state(probe: ProbeDefinition, trajectories: tuple[Trajectory, ...], field_id: str) -> tuple[Denominator, list[tuple[Trajectory, Any]]]:
+def _state(
+    probe: ProbeDefinition, trajectories: tuple[Trajectory, ...], field_id: str
+) -> tuple[Denominator, list[tuple[Trajectory, Any]]]:
     answers: list[tuple[Trajectory, Any]] = []
     skipped = unanswered = deferred = flagged = resolved = 0
     eligible = 0
@@ -169,13 +180,12 @@ def _state(probe: ProbeDefinition, trajectories: tuple[Trajectory, ...], field_i
             continue
         eligible += 1
         event = _latest_disposition(trajectory.events, field_id)
-        has_flag = any(e.kind == EventKind.FLAGGED and e.question_id == field_id for e in trajectory.events)
+        has_flag = any(
+            e.kind == EventKind.FLAGGED and e.question_id == field_id for e in trajectory.events
+        )
         flagged += int(has_flag)
         if event is None:
-            if has_flag:
-                resolved += 1
-            else:
-                unanswered += 1
+            unanswered += 1
         elif event.kind == EventKind.DEFERRED:
             deferred += 1
             resolved += 1
@@ -186,7 +196,17 @@ def _state(probe: ProbeDefinition, trajectories: tuple[Trajectory, ...], field_i
             answers.append((trajectory, event.value))
             resolved += 1
     selected = sum(len(_selected(value)) for _, value in answers)
-    return Denominator(len(trajectories), eligible, resolved, len(answers), selected, skipped, flagged, deferred, unanswered), answers
+    return Denominator(
+        len(trajectories),
+        eligible,
+        resolved,
+        len(answers),
+        selected,
+        skipped,
+        flagged,
+        deferred,
+        unanswered,
+    ), answers
 
 
 def _selected(value: Any) -> list[Any]:
@@ -197,21 +217,35 @@ def _selected(value: Any) -> list[Any]:
     return [value]
 
 
-def _provenance(probe: ProbeDefinition, definition: RepresentationDefinition, trajectories: tuple[Trajectory, ...]) -> dict[str, Any]:
-    field_revisions = {source.field_id: probe.question(source.field_id).revision for source in definition.sources if source.field_id}
+def _provenance(
+    probe: ProbeDefinition,
+    definition: RepresentationDefinition,
+    trajectories: tuple[Trajectory, ...],
+) -> dict[str, Any]:
+    field_revisions = {
+        source.field_id: probe.question(source.field_id).revision
+        for source in definition.sources
+        if source.field_id
+    }
     taxonomy_ids = {
-        probe.question(source.field_id).taxonomy_id for source in definition.sources
+        probe.question(source.field_id).taxonomy_id
+        for source in definition.sources
         if source.field_id and probe.question(source.field_id).taxonomy_id
     }
     population = [trajectory.participation.id for trajectory in trajectories]
     snapshot = hashlib.sha256(json.dumps(population, sort_keys=True).encode()).hexdigest()[:16]
     return {
-        "probe_id": probe.id, "probe_revision": probe.revision,
+        "probe_id": probe.id,
+        "probe_revision": probe.revision,
         "representation_revision": definition.revision,
         "field_revisions": field_revisions,
-        "taxonomy_revisions": {taxonomy_id: probe.taxonomy(taxonomy_id).revision for taxonomy_id in sorted(taxonomy_ids)},
+        "taxonomy_revisions": {
+            taxonomy_id: probe.taxonomy(taxonomy_id).revision
+            for taxonomy_id in sorted(taxonomy_ids)
+        },
         "scope_ids": sorted({item.participation.scope_id for item in trajectories}),
-        "participation_ids": population, "snapshot_id": snapshot,
+        "participation_ids": population,
+        "snapshot_id": snapshot,
         "evaluated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
     }
 
@@ -240,7 +274,23 @@ def evaluate_representation(
     if item.type == RepresentationType.TIMELINE:
         data = {"events": list(timeline_events(population))}
     elif item.type == RepresentationType.COMPOSITE:
-        components = [evaluate_representation(probe, component, population) for component in item.components]
+        components = []
+        for index, component in enumerate(item.components):
+            if isinstance(component, str):
+                components.append(evaluate_representation(probe, component, population))
+                continue
+            projection = dict(component.projection)
+            if component.type == RepresentationType.GROUPED_DISTRIBUTION:
+                projection.setdefault("group_by", "taxonomy_group")
+            inline = RepresentationDefinition(
+                id=f"{item.id}.component.{index + 1}",
+                revision=item.revision,
+                type=component.type,
+                scope=item.scope,
+                sources=(component.source,),
+                projection=projection,
+            )
+            components.append(evaluate_representation(probe, inline, population))
         data = {"components": [component.to_dict() for component in components]}
     elif item.type == RepresentationType.COMPARISON:
         roles: dict[str, dict[str, int]] = {}
@@ -251,7 +301,8 @@ def evaluate_representation(
             roles[source.role] = dict(sorted(counts.items()))
             denominators[source.role] = source_denominator.to_dict()
         denominator = Denominator(
-            len(population), len(population),
+            len(population),
+            len(population),
             sum(value["resolved"] for value in denominators.values()),
             sum(value["answered"] for value in denominators.values()),
             sum(value["selected"] for value in denominators.values()),
@@ -264,35 +315,72 @@ def evaluate_representation(
     else:
         source = item.sources[0]
         denominator, answers = _state(probe, population, source.field_id)
-        if item.type == RepresentationType.DISTRIBUTION:
+        if item.type in {RepresentationType.DISTRIBUTION, RepresentationType.GROUPED_DISTRIBUTION}:
             counts = Counter(str(value) for _, answer in answers for value in _selected(answer))
             base = denominator.answered or 1
-            values = {key: {"count": count, "proportion": count / base} for key, count in sorted(counts.items())}
+            values = {
+                key: {"count": count, "proportion": count / base}
+                for key, count in sorted(counts.items())
+            }
             data = {"values": values}
-            if item.projection.get("group_by") == "taxonomy_group":
+            if (
+                item.type == RepresentationType.GROUPED_DISTRIBUTION
+                or item.projection.get("group_by") == "taxonomy_group"
+            ):
                 question = probe.question(source.field_id)
-                taxonomy = probe.taxonomy(str(item.projection.get("taxonomy") or question.taxonomy_id))
+                taxonomy = probe.taxonomy(
+                    str(item.projection.get("taxonomy") or question.taxonomy_id)
+                )
                 data["groups"] = {
-                    group.id: {"option_ids": list(group.option_values), "count": sum(counts[value] for value in group.option_values)}
+                    group.id: {
+                        "option_ids": list(group.option_values),
+                        "count": sum(counts[value] for value in group.option_values),
+                    }
                     for group in taxonomy.groups
                 }
         elif item.type == RepresentationType.RESPONSES:
-            data = {"responses": [{"participant_id": trajectory.participation.participant_id, "value": answer} for trajectory, answer in answers]}
+            data = {
+                "responses": [
+                    {"participant_id": trajectory.participation.participant_id, "value": answer}
+                    for trajectory, answer in answers
+                ]
+            }
         elif item.type == RepresentationType.RECORDS:
-            data = {"records": [{"participant_id": trajectory.participation.participant_id, "value": answer} for trajectory, answer in answers]}
+            data = {
+                "records": [
+                    {"participant_id": trajectory.participation.participant_id, "value": answer}
+                    for trajectory, answer in answers
+                ]
+            }
         else:
             raise ValueError(f"Unsupported representation type `{item.type}`.")
-    return RepresentationResult(item.id, item.type.value, item.scope.value, denominator, data, _provenance(probe, item, population))
+    return RepresentationResult(
+        item.id,
+        item.type.value,
+        item.scope.value,
+        denominator,
+        data,
+        _provenance(probe, item, population),
+    )
 
 
-def evaluate_results(probe: ProbeDefinition, trajectories: Iterable[Trajectory]) -> ResultsProjection:
+def evaluate_results(
+    probe: ProbeDefinition, trajectories: Iterable[Trajectory]
+) -> ResultsProjection:
     if probe.results is None:
         raise ValueError("Probe has no authored results composition.")
     population = tuple(trajectories)
     blocks = []
     for block in probe.results.blocks:
         if block.representation_id:
-            blocks.append(ResultsBlock("representation", block.representation_id, evaluate_representation(probe, block.representation_id, population), commentary=block.commentary))
+            blocks.append(
+                ResultsBlock(
+                    "representation",
+                    block.representation_id,
+                    evaluate_representation(probe, block.representation_id, population),
+                    commentary=block.commentary,
+                )
+            )
         else:
             blocks.append(ResultsBlock("narrative", narrative=block.narrative))
     return ResultsProjection(probe.results.title, probe.results.intro, tuple(blocks))
@@ -302,6 +390,18 @@ def representation_result_from_dict(payload: Mapping[str, Any]) -> Representatio
     if payload.get("schema") != "probe-representation-result/v1":
         raise ValueError(f"Unsupported representation result schema `{payload.get('schema')}`.")
     return RepresentationResult(
-        str(payload["representation_id"]), str(payload["representation_type"]), str(payload["scope"]),
-        Denominator(**({"resolved": int((payload.get("denominator") or {}).get("eligible", 0)) - int((payload.get("denominator") or {}).get("unanswered", 0)), **dict(payload.get("denominator") or {})})), dict(payload.get("data") or {}), dict(payload.get("provenance") or {}),
+        str(payload["representation_id"]),
+        str(payload["representation_type"]),
+        str(payload["scope"]),
+        Denominator(
+            **(
+                {
+                    "resolved": int((payload.get("denominator") or {}).get("eligible", 0))
+                    - int((payload.get("denominator") or {}).get("unanswered", 0)),
+                    **dict(payload.get("denominator") or {}),
+                }
+            )
+        ),
+        dict(payload.get("data") or {}),
+        dict(payload.get("provenance") or {}),
     )

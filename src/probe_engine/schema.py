@@ -9,7 +9,12 @@ from .model import (
     Condition,
     DefinitionError,
     FieldDefinition,
+    FlowModeDefinition,
+    FingerprintAxis,
+    EditorialReviewItem,
+    AuthoringDefinition,
     InputType,
+    LocationCapabilities,
     NarrativeBlock,
     Option,
     OptionGroup,
@@ -19,6 +24,7 @@ from .model import (
     QuestionDefinition,
     RevisionLineage,
     RepresentationDefinition,
+    RepresentationComponent,
     RepresentationScope,
     RepresentationSource,
     RepresentationType,
@@ -27,6 +33,7 @@ from .model import (
     ResultsDefinition,
     ReasonTaxonomy,
     ResolutionDefinition,
+    SelectionShortcut,
     SectionBlock,
     SectionDefinition,
     StepDefinition,
@@ -43,6 +50,7 @@ class SchemaError(ValueError):
 def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
     if payload.get("schema") != "probe-definition/v1":
         raise SchemaError(f"Unsupported Probe schema `{payload.get('schema')}`.")
+
     def option(raw: Mapping[str, Any]) -> Option:
         return Option(str(raw["value"]), str(raw["label"]))
 
@@ -56,7 +64,12 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
     def condition(raw: Mapping[str, Any] | None) -> Condition | None:
         if not raw:
             return None
-        return Condition(str(raw["field_id"]), str(raw["operator"]), raw.get("value"))
+        return Condition(
+            str(raw.get("field_id") or ""),
+            str(raw.get("operator") or "equals"),
+            raw.get("value"),
+            tuple(condition(item) for item in raw.get("clauses") or ()),  # type: ignore[arg-type]
+        )
 
     def other(raw: Mapping[str, Any] | None) -> OtherControl:
         value = dict(raw or {})
@@ -66,6 +79,16 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
             label=str(value.get("label") or ""),
             placeholder=str(value.get("placeholder") or ""),
             required=bool(value.get("required")),
+            visible_if=condition(value.get("visible_if")),
+        )
+
+    def capabilities(raw: Mapping[str, Any] | None) -> LocationCapabilities | None:
+        if not raw:
+            return None
+        return LocationCapabilities(
+            bool(raw.get("manual_text")),
+            bool(raw.get("geolocation_lookup")),
+            bool(raw.get("geolocation_requires_user_action", True)),
         )
 
     def route(raw: Mapping[str, Any]) -> TerminalRoute:
@@ -90,10 +113,30 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
             "visible_if": condition(raw.get("visible_if")),
             "routes": tuple(route(item) for item in raw.get("routes") or ()),
             "item_fields": tuple(
-                FieldDefinition(**field_values(item, nested=True)) for item in raw.get("item_fields") or ()
+                FieldDefinition(**field_values(item, nested=True))
+                for item in raw.get("item_fields") or ()
             ),
             "metadata": dict(raw.get("metadata") or {}),
             "independently_answerable": bool(raw.get("independently_answerable", not nested)),
+            "shortcuts": tuple(
+                SelectionShortcut(
+                    str(item["id"]),
+                    str(item["label"]),
+                    tuple(str(value) for value in item.get("select") or ()),
+                )
+                for item in raw.get("shortcuts") or ()
+            ),
+            "capabilities": capabilities(raw.get("capabilities")),
+            "companions": tuple(
+                FieldDefinition(**field_values(item, nested=True))
+                for item in raw.get("companions") or ()
+            ),
+            "option_groups": tuple(group(item) for item in raw.get("option_groups") or ()),
+            "free_text_field": (
+                FieldDefinition(**field_values(raw["free_text_field"], nested=True))
+                if raw.get("free_text_field")
+                else None
+            ),
         }
 
     questions = tuple(
@@ -115,27 +158,54 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
         elif raw.get("kind") == "question":
             blocks.append(QuestionBlock(str(raw.get("question_id") or "")))
         elif raw.get("kind") == "section":
-            blocks.append(SectionBlock(
-                str(raw.get("id") or ""),
-                str(raw.get("title") or ""),
-                tuple(str(item) for item in raw.get("steps") or ()),
-                dict(raw.get("process") or {}),
-            ))
+            blocks.append(
+                SectionBlock(
+                    str(raw.get("id") or ""),
+                    str(raw.get("title") or ""),
+                    tuple(str(item) for item in raw.get("steps") or ()),
+                    dict(raw.get("process") or {}),
+                )
+            )
         else:
             raise DefinitionError(f"Unsupported block kind `{raw.get('kind')}`.")
-    representations = tuple(
-        RepresentationDefinition(
-            id=str(raw["id"]), revision=int(raw["revision"]),
-            type=RepresentationType(raw["type"]), scope=RepresentationScope(raw["scope"]),
-            sources=tuple(RepresentationSource(
+
+    def representation_component(raw: Mapping[str, Any]) -> str | RepresentationComponent:
+        if "representation" in raw:
+            return str(raw["representation"])
+        source = dict(raw.get("source") or {})
+        return RepresentationComponent(
+            RepresentationType(raw["type"]),
+            RepresentationSource(
                 field_id=str(source.get("field") or ""),
                 trajectory=str(source.get("trajectory") or ""),
                 role=str(source.get("role") or ""),
                 path=tuple(str(part) for part in source.get("path") or ()),
-            ) for source in raw.get("sources") or ()),
+            ),
+            dict(raw.get("projection") or {}),
+        )
+
+    representations = tuple(
+        RepresentationDefinition(
+            id=str(raw["id"]),
+            revision=int(raw["revision"]),
+            type=RepresentationType(raw["type"]),
+            scope=RepresentationScope(raw["scope"]),
+            sources=tuple(
+                RepresentationSource(
+                    field_id=str(source.get("field") or ""),
+                    trajectory=str(source.get("trajectory") or ""),
+                    role=str(source.get("role") or ""),
+                    path=tuple(str(part) for part in source.get("path") or ()),
+                )
+                for source in raw.get("sources") or ()
+            ),
             projection=dict(raw.get("projection") or {}),
-            components=tuple(str(value) for value in raw.get("components") or ()),
-        ) for raw in payload.get("representations") or ()
+            components=tuple(
+                representation_component(value) for value in raw.get("components") or ()
+            ),
+            title=str(raw.get("title") or ""),
+        )
+        for raw in payload.get("representations") or ()
     )
     raw_results = payload.get("results")
     results = None
@@ -143,28 +213,106 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
         result_blocks = []
         for raw in raw_results.get("blocks") or ():
             if raw.get("type") == "narrative":
-                result_blocks.append(ResultBlockDefinition(narrative=str(raw.get("markdown") or "")))
+                result_blocks.append(
+                    ResultBlockDefinition(narrative=str(raw.get("markdown") or ""))
+                )
             else:
                 commentary = raw.get("commentary")
-                result_blocks.append(ResultBlockDefinition(
-                    representation_id=str(raw.get("representation") or ""),
-                    commentary=Interpretation(
-                        str(commentary.get("markdown") or ""), str(commentary.get("kind") or "authored")
-                    ) if commentary else None,
-                ))
-        results = ResultsDefinition(str(raw_results.get("title") or ""), str(raw_results.get("intro") or ""), tuple(result_blocks))
+                result_blocks.append(
+                    ResultBlockDefinition(
+                        representation_id=str(raw.get("representation") or ""),
+                        commentary=Interpretation(
+                            str(commentary.get("markdown") or ""),
+                            str(commentary.get("kind") or "authored"),
+                        )
+                        if commentary
+                        else None,
+                    )
+                )
+        results = ResultsDefinition(
+            str(raw_results.get("title") or ""),
+            str(raw_results.get("intro") or ""),
+            tuple(result_blocks),
+        )
     raw_resolution = dict(payload.get("resolution") or {})
     defaults = ResolutionDefinition()
+
     def reasons(name: str, default: ReasonTaxonomy) -> ReasonTaxonomy:
         raw = raw_resolution.get(name)
         if not raw:
             return default
         return ReasonTaxonomy(
-            str(raw["id"]), int(raw["revision"]), tuple(option(item) for item in raw.get("options") or ())
+            str(raw["id"]),
+            int(raw["revision"]),
+            tuple(option(item) for item in raw.get("options") or ()),
         )
+
     resolution = ResolutionDefinition(
-        reasons("skip_reasons", defaults.skip_reasons),
-        reasons("flag_reasons", defaults.flag_reasons),
+        skip_reasons=reasons("skip_reasons", defaults.skip_reasons),
+        flag_reasons=reasons("flag_reasons", defaults.flag_reasons),
+        actions=tuple(str(value) for value in raw_resolution.get("actions") or defaults.actions),
+        nothing_substantively_mandatory=bool(
+            raw_resolution.get(
+                "nothing_substantively_mandatory", defaults.nothing_substantively_mandatory
+            )
+        ),
+        answer_before_meta_actions=bool(
+            raw_resolution.get("answer_before_meta_actions", defaults.answer_before_meta_actions)
+        ),
+        subordinate_fields_inherit_parent_resolution=bool(
+            raw_resolution.get(
+                "subordinate_fields_inherit_parent_resolution",
+                defaults.subordinate_fields_inherit_parent_resolution,
+            )
+        ),
+        skip_enabled=bool(raw_resolution.get("skip_enabled", defaults.skip_enabled)),
+        skip_reason_prompt=str(raw_resolution.get("skip_reason_prompt") or ""),
+        skip_note_optional=bool(
+            raw_resolution.get("skip_note_optional", defaults.skip_note_optional)
+        ),
+        flag_enabled=bool(raw_resolution.get("flag_enabled", defaults.flag_enabled)),
+        flag_prompt=str(raw_resolution.get("flag_prompt") or ""),
+        flag_note_optional=bool(
+            raw_resolution.get("flag_note_optional", defaults.flag_note_optional)
+        ),
+        review_editable=bool(raw_resolution.get("review_editable", defaults.review_editable)),
+    )
+    raw_authoring = dict(payload.get("authoring") or {})
+    authoring = AuthoringDefinition(
+        language=str(raw_authoring.get("language") or ""),
+        default_mode=str(raw_authoring.get("default_mode") or ""),
+        show_mode_selection=bool(raw_authoring.get("show_mode_selection")),
+        show_welcome_step=bool(raw_authoring.get("show_welcome_step")),
+        identity_position=str(raw_authoring.get("identity_position") or ""),
+        review=dict(raw_authoring.get("review") or {}),
+        step_order=tuple(str(value) for value in raw_authoring.get("step_order") or ()),
+        flow_modes=tuple(
+            FlowModeDefinition(
+                str(item["id"]),
+                str(item.get("title") or ""),
+                str(item.get("detail") or ""),
+                tuple(str(value) for value in item.get("step_ids") or ()),
+            )
+            for item in raw_authoring.get("flow_modes") or ()
+        ),
+        profile_fields=tuple(str(value) for value in raw_authoring.get("profile_fields") or ()),
+        session_fields=tuple(str(value) for value in raw_authoring.get("session_fields") or ()),
+        deferrable_fields=tuple(
+            str(value) for value in raw_authoring.get("deferrable_fields") or ()
+        ),
+        fingerprint_axes=tuple(
+            FingerprintAxis(
+                str(item["id"]),
+                str(item.get("source_field_id") or ""),
+                str(item.get("taxonomy_id") or ""),
+            )
+            for item in raw_authoring.get("fingerprint_axes") or ()
+        ),
+        editorial_review=tuple(
+            EditorialReviewItem(str(item["id"]), str(item["status"]), str(item.get("note") or ""))
+            for item in raw_authoring.get("editorial_review") or ()
+        ),
+        presentation_hints=dict(raw_authoring.get("presentation_hints") or {}),
     )
     return ProbeDefinition(
         id=str(payload.get("id") or ""),
@@ -205,6 +353,7 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
         representations=representations,
         results=results,
         resolution=resolution,
+        authoring=authoring,
         metadata=dict(payload.get("metadata") or {}),
     )
 
@@ -233,10 +382,12 @@ def trajectory_from_dict(payload: Mapping[str, Any]) -> Trajectory:
                 reason=str(event.get("reason") or ""),
                 reason_codes=tuple(str(value) for value in event.get("reason_codes") or ()),
                 reason_note=str(event.get("reason_note") or event.get("reason") or ""),
-                legacy_reason_codes=tuple(str(value) for value in event.get("legacy_reason_codes") or ()),
+                legacy_reason_codes=tuple(
+                    str(value) for value in event.get("legacy_reason_codes") or ()
+                ),
                 metadata=dict(event.get("metadata") or {}),
             )
             for event in payload.get("events") or ()
         ),
     )
-    OtherControl,
+    (OtherControl,)

@@ -280,6 +280,26 @@ def test_authored_skip_action_can_end_without_becoming_an_answer():
     assert resolution.event.value is None
 
 
+def test_grouped_distribution_without_taxonomy_keeps_values_and_empty_groups():
+    payload = yaml.safe_load(
+        (Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml").read_text()
+    )
+    payload["representations"][0]["components"][1]["type"] = "grouped_distribution"
+    value = load_yaml_probe(payload)
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    runtime.answer("availability", ["oct28_am_online"])
+
+    result = evaluate_representation(
+        value,
+        value.representation("participation_overview"),
+        [runtime.trajectory],
+    )
+
+    component = result.data["components"][1]
+    assert component["data"]["values"]["oct28_am_online"]["count"] == 1
+    assert component["data"]["groups"] == {}
+
+
 def test_checkpoint_capabilities_round_trip_and_remain_distinct_from_sync():
     payload = yaml.safe_load(
         (Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml").read_text()

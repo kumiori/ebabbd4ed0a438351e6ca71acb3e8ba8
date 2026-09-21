@@ -328,15 +328,16 @@ def evaluate_representation(
                 or item.projection.get("group_by") == "taxonomy_group"
             ):
                 question = probe.question(source.field_id)
-                taxonomy = probe.taxonomy(
-                    str(item.projection.get("taxonomy") or question.taxonomy_id)
+                taxonomy_id = str(
+                    item.projection.get("taxonomy") or question.taxonomy_id
                 )
+                groups = probe.taxonomy(taxonomy_id).groups if taxonomy_id else ()
                 data["groups"] = {
                     group.id: {
                         "option_ids": list(group.option_values),
                         "count": sum(counts[value] for value in group.option_values),
                     }
-                    for group in taxonomy.groups
+                    for group in groups
                 }
         elif item.type == RepresentationType.RESPONSES:
             data = {

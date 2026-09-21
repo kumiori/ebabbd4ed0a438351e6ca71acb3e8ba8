@@ -547,6 +547,35 @@ class ProbeRuntime:
     def checkpoint(self, store: Any) -> Any:
         return store.checkpoint(self._trajectory)
 
+    def reach_checkpoint(self, section_id: str, store: Any) -> Any:
+        """Persist a private draft checkpoint without implying collective sync."""
+        try:
+            section = self.probe.section(section_id)
+        except KeyError as exc:
+            raise RuntimeError(f"Unknown section `{section_id}`.") from exc
+        if not section.checkpoint:
+            raise RuntimeError(f"Section `{section_id}` has no checkpoint.")
+        self._trajectory = self._trajectory.append(
+            _event(EventKind.CHECKPOINT, metadata={"section_id": section.id})
+        )
+        return store.checkpoint(self._trajectory)
+
+    def reach_sync_point(self, section_id: str, store: Any) -> Any:
+        """Record arrival at an authored sync point independently of draft save."""
+        try:
+            section = self.probe.section(section_id)
+        except KeyError as exc:
+            raise RuntimeError(f"Unknown section `{section_id}`.") from exc
+        if not section.sync_point:
+            raise RuntimeError(f"Section `{section_id}` has no sync point.")
+        self._trajectory = self._trajectory.append(
+            _event(
+                EventKind.SYNC_POINT_REACHED,
+                metadata={"section_id": section.id, "sync_point": section.sync_point},
+            )
+        )
+        return store.checkpoint(self._trajectory)
+
     def reach_section_boundary(self, section_id: str, store: Any) -> Any:
         """Record a declared process boundary; coordination remains external."""
         try:

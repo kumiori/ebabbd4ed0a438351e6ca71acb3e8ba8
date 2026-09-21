@@ -230,6 +230,22 @@ def test_section_boundary_records_checkpoint_and_named_sync_point_only():
     assert store.checkpoint_calls == 1
 
 
+def test_private_checkpoint_and_sync_arrival_are_separate_operations():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    store = InMemoryTrajectoryStore()
+
+    runtime.reach_checkpoint("exchange", store)
+    assert [event.kind.value for event in runtime.trajectory.events] == ["checkpoint"]
+
+    runtime.reach_sync_point("exchange", store)
+    assert [event.kind.value for event in runtime.trajectory.events] == [
+        "checkpoint",
+        "sync_point_reached",
+    ]
+    assert store.checkpoint_calls == 2
+
+
 def test_checkpoint_capabilities_round_trip_and_remain_distinct_from_sync():
     payload = yaml.safe_load(
         (Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml").read_text()

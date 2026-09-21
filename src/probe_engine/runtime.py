@@ -549,15 +549,36 @@ class ProbeRuntime:
 
     def reach_checkpoint(self, section_id: str, store: Any) -> Any:
         """Persist a private draft checkpoint without implying collective sync."""
+        candidate = self.prepare_checkpoint(section_id)
+        return self.commit_checkpoint(section_id, store, prepared=candidate)
+
+    def prepare_checkpoint(self, section_id: str) -> Trajectory:
+        """Build the exact checkpoint trajectory without writing it."""
         try:
             section = self.probe.section(section_id)
         except KeyError as exc:
             raise RuntimeError(f"Unknown section `{section_id}`.") from exc
         if not section.checkpoint:
             raise RuntimeError(f"Section `{section_id}` has no checkpoint.")
-        self._trajectory = self._trajectory.append(
+        return self._trajectory.append(
             _event(EventKind.CHECKPOINT, metadata={"section_id": section.id})
         )
+
+    def commit_checkpoint(
+        self,
+        section_id: str,
+        store: Any,
+        *,
+        prepared: Trajectory,
+    ) -> Any:
+        if prepared.participation != self._trajectory.participation:
+            raise RuntimeError("Prepared checkpoint belongs to a different participation.")
+        if not prepared.events or (
+            prepared.events[-1].kind != EventKind.CHECKPOINT
+            or prepared.events[-1].metadata.get("section_id") != section_id
+        ):
+            raise RuntimeError("Prepared checkpoint does not match its section.")
+        self._trajectory = prepared
         return store.checkpoint(self._trajectory)
 
     def reach_sync_point(self, section_id: str, store: Any) -> Any:

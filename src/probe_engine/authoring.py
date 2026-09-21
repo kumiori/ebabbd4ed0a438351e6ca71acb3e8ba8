@@ -194,6 +194,7 @@ _FIELD_KEYS = {
     "routing",
     "item",
     "skippable",
+    "skip_action",
     "flaggable",
     "allow_comment",
     "shared_dimension",
@@ -269,6 +270,7 @@ def _canonical_question(raw: Mapping[str, Any]) -> QuestionDefinition:
     return QuestionDefinition(
         **common,
         skippable=_bool(raw.get("skippable"), True),
+        skip_action=str(raw.get("skip_action") or "continue"),
         flaggable=_bool(raw.get("flaggable"), True),
         allow_comment=_bool(raw.get("allow_comment"), False),
         shared_dimension=str(raw.get("shared_dimension") or ""),
@@ -302,6 +304,7 @@ def _question(
         options=_options(raw.get("options")),
         required=_bool(raw.get("required"), False),
         skippable=_bool(raw.get("skippable"), True),
+        skip_action=str(raw.get("skip_action") or "continue"),
         flaggable=_bool(raw.get("flaggable"), True),
         allow_comment=_bool(raw.get("allow_comment"), False),
         shared_dimension=str(raw.get("shared_dimension") or ""),
@@ -467,6 +470,7 @@ def _authoring_field(
         "min_items",
         "routing",
         "allow_skip",
+        "skip_action",
         "selection_feedback",
         "suggestion_label",
         "detail_prompt",
@@ -608,6 +612,7 @@ def _authoring_field(
     return QuestionDefinition(
         **values,
         skippable=_bool(raw.get("allow_skip"), True),
+        skip_action=str(raw.get("skip_action") or "continue"),
         flaggable=True,
         metadata={
             "step_id": str(raw.get("step") or ""),

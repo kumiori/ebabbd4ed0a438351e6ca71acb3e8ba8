@@ -428,6 +428,7 @@ class QuestionDefinition:
     item_fields: tuple[FieldDefinition, ...] = ()
     required: bool = False
     skippable: bool = True
+    skip_action: str = "continue"
     flaggable: bool = True
     allow_comment: bool = False
     shared_dimension: str = ""
@@ -448,6 +449,8 @@ class QuestionDefinition:
             raise DefinitionError(f"Question `{self.id}` revision must be positive.")
         if self.status not in {"active", "retired"}:
             raise DefinitionError(f"Question `{self.id}` has unsupported status `{self.status}`.")
+        if self.skip_action not in {"continue", "end"}:
+            raise DefinitionError(f"Question `{self.id}` has unsupported skip action `{self.skip_action}`.")
         if self.input_type in {
             InputType.SINGLE,
             InputType.MULTIPLE,
@@ -489,6 +492,7 @@ class QuestionDefinition:
             "item_fields": [item.to_dict() for item in self.item_fields],
             "required": self.required,
             "skippable": self.skippable,
+            "skip_action": self.skip_action,
             "flaggable": self.flaggable,
             "allow_comment": self.allow_comment,
             "shared_dimension": self.shared_dimension,

@@ -246,6 +246,40 @@ def test_private_checkpoint_and_sync_arrival_are_separate_operations():
     assert store.checkpoint_calls == 2
 
 
+def test_prepared_checkpoint_is_exactly_the_draft_sent_to_storage():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    store = InMemoryTrajectoryStore()
+    prepared = runtime.prepare_checkpoint("portrait")
+
+    runtime.commit_checkpoint("portrait", store, prepared=prepared)
+
+    assert runtime.trajectory == prepared
+    assert store.load(prepared.participation.id) == prepared
+
+
+def test_authored_skip_action_can_end_without_becoming_an_answer():
+    payload = yaml.safe_load(
+        (Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml").read_text()
+    )
+    consent = payload["questions"][0]
+    consent["allow_skip"] = True
+    consent["skip_action"] = "end"
+
+    value = load_yaml_probe(payload)
+    question = value.question(consent["id"])
+    assert question.skippable is True
+    assert question.skip_action == "end"
+    assert probe_from_dict(value.to_dict()) == value
+
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+    runtime.skip(question.id, reason_codes=["prefer_not"])
+    resolution = runtime.resolution(question.id)
+    assert resolution.state == ResolutionState.SKIPPED
+    assert resolution.event is not None
+    assert resolution.event.value is None
+
+
 def test_checkpoint_capabilities_round_trip_and_remain_distinct_from_sync():
     payload = yaml.safe_load(
         (Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml").read_text()

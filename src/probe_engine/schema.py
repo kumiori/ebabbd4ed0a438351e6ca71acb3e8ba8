@@ -150,6 +150,7 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
         QuestionDefinition(
             **field_values(raw),
             skippable=bool(raw.get("skippable", True)),
+            skip_action=str(raw.get("skip_action") or "continue"),
             flaggable=bool(raw.get("flaggable", True)),
             allow_comment=bool(raw.get("allow_comment")),
             shared_dimension=str(raw.get("shared_dimension") or ""),

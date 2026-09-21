@@ -10,6 +10,7 @@ from typing import Any, Protocol
 import yaml
 
 from .model import (
+    CheckpointDefinition,
     Condition,
     DefinitionError,
     FieldDefinition,
@@ -100,6 +101,25 @@ def _bool(value: Any, default: bool) -> bool:
     if token in {"false", "no", "0", "off"}:
         return False
     raise DefinitionError(f"Invalid boolean value `{value}`.")
+
+
+def _checkpoint(value: Any) -> CheckpointDefinition:
+    if isinstance(value, Mapping):
+        _reject_unknown(
+            value,
+            {"enabled", "review", "draft_save", "export"},
+            "section checkpoint",
+        )
+        export = _mapping(value.get("export") or {}, "section checkpoint export")
+        _reject_unknown(export, {"yaml"}, "section checkpoint export")
+        return CheckpointDefinition(
+            enabled=_bool(value.get("enabled"), True),
+            review=_bool(value.get("review"), False),
+            draft_save=_bool(value.get("draft_save"), False),
+            export_yaml=_bool(export.get("yaml"), False),
+        )
+    enabled = _bool(value, False)
+    return CheckpointDefinition(enabled=enabled, draft_save=enabled)
 
 
 def _options(raw: Any) -> tuple[Option, ...]:
@@ -727,13 +747,18 @@ def _load_questionnaire_probe(payload: Mapping[str, Any]) -> ProbeDefinition:
         _reject_unknown(item, {"id", "title", "steps", "process"}, "section")
         process = _mapping(item.get("process") or {}, "section process")
         _reject_unknown(process, {"checkpoint", "sync_point"}, "section process")
+        checkpoint_config = _checkpoint(process.get("checkpoint"))
+        sync_point = str(process.get("sync_point") or "")
+        if sync_point and not checkpoint_config.enabled:
+            checkpoint_config = CheckpointDefinition(enabled=True, draft_save=True)
         built_sections.append(
             SectionDefinition(
                 str(item.get("id") or ""),
                 str(item.get("title") or ""),
                 tuple(str(value) for value in item.get("steps") or ()),
-                _bool(process.get("checkpoint"), False) or bool(process.get("sync_point")),
-                str(process.get("sync_point") or ""),
+                checkpoint_config.enabled or bool(sync_point),
+                sync_point,
+                checkpoint_config,
             )
         )
     sections = tuple(built_sections)
@@ -924,14 +949,18 @@ def load_yaml_probe(
         _reject_unknown(item, {"id", "title", "steps", "process"}, "section")
         process = _mapping(item.get("process") or {}, f"section `{item.get('id')}` process")
         _reject_unknown(process, {"checkpoint", "sync_point"}, "section process")
+        checkpoint_config = _checkpoint(process.get("checkpoint"))
         sync_point = str(process.get("sync_point") or "")
+        if sync_point and not checkpoint_config.enabled:
+            checkpoint_config = CheckpointDefinition(enabled=True, draft_save=True)
         sections.append(
             SectionDefinition(
                 str(item.get("id") or ""),
                 str(item.get("title") or ""),
                 tuple(str(value) for value in item.get("steps") or ()),
-                _bool(process.get("checkpoint"), False) or bool(sync_point),
+                checkpoint_config.enabled or bool(sync_point),
                 sync_point,
+                checkpoint_config,
             )
         )
 
@@ -966,7 +995,12 @@ def load_yaml_probe(
                     section.id,
                     section.title,
                     section.step_ids,
-                    {"checkpoint": section.checkpoint, "sync_point": section.sync_point},
+                    {
+                        "checkpoint": section.checkpoint_config.to_dict()
+                        if section.checkpoint_config.enabled
+                        else section.checkpoint,
+                        "sync_point": section.sync_point,
+                    },
                 )
             )
             emitted_sections.add(section.id)

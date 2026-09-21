@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 from probe_engine import (
     DefinitionError,
@@ -227,6 +228,42 @@ def test_section_boundary_records_checkpoint_and_named_sync_point_only():
     ]
     assert runtime.trajectory.events[-1].metadata["sync_point"] == "knowledge_exchange"
     assert store.checkpoint_calls == 1
+
+
+def test_checkpoint_capabilities_round_trip_and_remain_distinct_from_sync():
+    payload = yaml.safe_load(
+        (Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml").read_text()
+    )
+    payload["sections"][0]["process"]["checkpoint"] = {
+        "enabled": True,
+        "review": True,
+        "draft_save": True,
+        "export": {"yaml": True},
+    }
+
+    value = load_yaml_probe(payload)
+    section = value.sections[0]
+    assert section.checkpoint is True
+    assert section.sync_point == ""
+    assert section.checkpoint_config.review is True
+    assert section.checkpoint_config.draft_save is True
+    assert section.checkpoint_config.export_yaml is True
+    assert probe_from_dict(value.to_dict()) == value
+
+
+def test_validation_errors_have_codes_and_other_skip_requires_detail():
+    value = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
+    runtime = ProbeRuntime(value, participant_id="p1", scope_id="montreal")
+
+    with pytest.raises(RuntimeError) as over_limit:
+        runtime.answer("inspiration", ["tool", "group", "project", "community"])
+    assert over_limit.value.code == "max_select"
+
+    with pytest.raises(RuntimeError) as missing_detail:
+        runtime.skip("dietary_preferences", reason_codes=["other"])
+    assert missing_detail.value.code == "other_detail_required"
+
+    runtime.skip("dietary_preferences", reason_codes=["other"], note="Mon motif")
 
 
 def test_definition_and_trajectory_schema_round_trip_and_fail_closed():

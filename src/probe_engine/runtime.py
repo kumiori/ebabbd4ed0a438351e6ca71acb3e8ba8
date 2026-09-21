@@ -15,6 +15,10 @@ from .model import InputType, LocationValue, ProbeDefinition, QuestionDefinition
 class RuntimeError(ValueError):
     """A runtime operation violates Probe semantics."""
 
+    def __init__(self, message: str, *, code: str = "invalid_answer") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 class EventKind(StrEnum):
     ANSWERED = "answered"
@@ -398,6 +402,11 @@ class ProbeRuntime:
         reason_note = str(note or legacy or "").strip()
         if len(reason_note) > 500:
             raise RuntimeError(f"{kind.title()} reason note exceeds 500 characters.")
+        if "other" in codes and not reason_note:
+            raise RuntimeError(
+                f"{kind.title()} reason `other` requires detail.",
+                code="other_detail_required",
+            )
         note_optional = (
             self.probe.resolution.skip_note_optional
             if kind == "skip"
@@ -610,7 +619,10 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
                 if question.other.required and (
                     not isinstance(other_text, str) or not other_text.strip()
                 ):
-                    raise RuntimeError(f"Question `{question.id}` requires other text.")
+                    raise RuntimeError(
+                        f"Question `{question.id}` requires other text.",
+                        code="other_detail_required",
+                    )
                 if other_text is not None and not isinstance(other_text, str):
                     raise RuntimeError(f"Question `{question.id}` other value requires text.")
             elif other not in (None, {}, ""):
@@ -653,11 +665,13 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
         count = len(selected_value)
         if question.min_select is not None and count < question.min_select:
             raise RuntimeError(
-                f"Question `{question.id}` requires at least {question.min_select} selections."
+                f"Question `{question.id}` requires at least {question.min_select} selections.",
+                code="min_select",
             )
         if question.max_select is not None and count > question.max_select:
             raise RuntimeError(
-                f"Question `{question.id}` allows at most {question.max_select} selections."
+                f"Question `{question.id}` allows at most {question.max_select} selections.",
+                code="max_select",
             )
     if question.input_type in {InputType.REPEATABLE, InputType.REPEATABLE_GROUP}:
         if not isinstance(value, (list, tuple)) or any(
@@ -666,7 +680,8 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
             raise RuntimeError(f"Question `{question.id}` requires a list of group items.")
         if question.min_items is not None and len(value) < question.min_items:
             raise RuntimeError(
-                f"Question `{question.id}` requires at least {question.min_items} items."
+                f"Question `{question.id}` requires at least {question.min_items} items.",
+                code="min_items",
             )
         known_fields = {item.id for item in question.item_fields} | {"id"}
         seen_item_ids: set[str] = set()
@@ -691,7 +706,8 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
             if missing:
                 raise RuntimeError(
                     f"Question `{question.id}` item {index} lacks required fields: "
-                    f"{', '.join(sorted(missing))}."
+                    f"{', '.join(sorted(missing))}.",
+                    code="repeatable_required_field",
                 )
             for field in question.item_fields:
                 if field.id in item and item.get(field.id) not in (None, "", []):

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .model import (
+    CheckpointDefinition,
     Condition,
     DefinitionError,
     FieldDefinition,
@@ -332,8 +333,23 @@ def probe_from_dict(payload: Mapping[str, Any]) -> ProbeDefinition:
                 str(raw["id"]),
                 str(raw["title"]),
                 tuple(str(value) for value in raw.get("step_ids") or ()),
-                bool((raw.get("process") or {}).get("checkpoint")),
+                bool(
+                    ((raw.get("process") or {}).get("checkpoint") or {}).get("enabled")
+                    if isinstance((raw.get("process") or {}).get("checkpoint"), Mapping)
+                    else (raw.get("process") or {}).get("checkpoint")
+                ),
                 str((raw.get("process") or {}).get("sync_point") or ""),
+                CheckpointDefinition(
+                    enabled=bool(((raw.get("process") or {}).get("checkpoint") or {}).get("enabled")),
+                    review=bool(((raw.get("process") or {}).get("checkpoint") or {}).get("review")),
+                    draft_save=bool(((raw.get("process") or {}).get("checkpoint") or {}).get("draft_save")),
+                    export_yaml=bool(((((raw.get("process") or {}).get("checkpoint") or {}).get("export") or {}).get("yaml"))),
+                )
+                if isinstance((raw.get("process") or {}).get("checkpoint"), Mapping)
+                else CheckpointDefinition(
+                    enabled=bool((raw.get("process") or {}).get("checkpoint")),
+                    draft_save=bool((raw.get("process") or {}).get("checkpoint")),
+                ),
             )
             for raw in payload.get("sections") or ()
         ),

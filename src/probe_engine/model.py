@@ -563,12 +563,31 @@ class StepDefinition:
 
 
 @dataclass(frozen=True)
+class CheckpointDefinition:
+    """UI-neutral capabilities authored for a private section checkpoint."""
+
+    enabled: bool = False
+    review: bool = False
+    draft_save: bool = False
+    export_yaml: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "review": self.review,
+            "draft_save": self.draft_save,
+            "export": {"yaml": self.export_yaml},
+        }
+
+
+@dataclass(frozen=True)
 class SectionDefinition:
     id: str
     title: str
     step_ids: tuple[str, ...]
     checkpoint: bool = False
     sync_point: str = ""
+    checkpoint_config: CheckpointDefinition = field(default_factory=CheckpointDefinition)
 
     def __post_init__(self) -> None:
         if not self.id or not self.title or not self.step_ids:
@@ -579,7 +598,12 @@ class SectionDefinition:
             "id": self.id,
             "title": self.title,
             "step_ids": list(self.step_ids),
-            "process": {"checkpoint": self.checkpoint, "sync_point": self.sync_point},
+            "process": {
+                "checkpoint": self.checkpoint_config.to_dict()
+                if self.checkpoint_config != CheckpointDefinition()
+                else self.checkpoint,
+                "sync_point": self.sync_point,
+            },
         }
 
 

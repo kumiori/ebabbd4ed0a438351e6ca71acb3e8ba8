@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
+import re
 from typing import Any
 
 from .model import InputType, LocationValue, ProbeDefinition, QuestionDefinition, RevisionLineage
@@ -770,6 +771,14 @@ def _validate_answer(question: Any, value: Any, *, probe: ProbeDefinition) -> No
         value, str
     ):
         raise RuntimeError(f"Question `{question.id}` requires text.")
+    if question.input_type == InputType.EMAIL:
+        if not isinstance(value, str) or not re.fullmatch(
+            r"[^@\s]+@[^@\s]+\.[^@\s]+", value.strip()
+        ):
+            raise RuntimeError(
+                f"Question `{question.id}` requires a valid email address.",
+                code="invalid_email",
+            )
     if question.input_type == InputType.URL:
         from urllib.parse import urlparse
 

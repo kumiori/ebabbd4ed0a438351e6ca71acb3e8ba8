@@ -20,6 +20,7 @@ class InputType(StrEnum):
     MULTIPLE_WITH_OTHER = "multi_with_other"
     TEXT = "text"
     TEXT_WITH_SUGGESTIONS = "text_with_suggestions"
+    EMAIL = "email"
     URL = "url"
     LOCATION = "location"
     NUMBER = "number"

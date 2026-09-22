@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "probe-engine"
-version = "0.3.0.dev5"
+version = "0.3.0.dev6"
 description = "Portable semantics for authored, versioned sensing instruments"
 readme = "README.md"
 requires-python = ">=3.11"

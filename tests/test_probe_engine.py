@@ -9,6 +9,7 @@ import yaml
 from probe_engine import (
     DefinitionError,
     InMemoryTrajectoryStore,
+    InputType,
     NarrativeBlock,
     ProbeRuntime,
     ReconciliationState,
@@ -691,6 +692,20 @@ def test_nested_fields_inherit_parent_resolution_unless_independent():
         runtime.validate_resolution("actors")
     runtime.skip("actors", reason_codes=["prefer_not_to_answer"])
     assert runtime.validate_resolution("actors").state == ResolutionState.SKIPPED
+
+
+def test_email_is_a_canonical_primitive_with_syntax_validation():
+    source = load_yaml_probe(Path(__file__).parent / "fixtures" / "montreal_communs_2.yaml")
+    payload = source.to_dict()
+    email = next(item for item in payload["questions"] if item["id"] == "name")
+    email["input_type"] = "email"
+    probe = probe_from_dict(payload)
+    assert probe.question("name").input_type == InputType.EMAIL
+    runtime = ProbeRuntime(probe, participant_id="p1", scope_id="scope")
+    runtime.answer("name", "personne@example.org")
+    with pytest.raises(RuntimeError, match="valid email address") as error:
+        runtime.answer("name", "pas une adresse")
+    assert error.value.code == "invalid_email"
 
 
 def test_flag_only_state_remains_unanswered_and_orthogonal():
